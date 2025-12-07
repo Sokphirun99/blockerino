@@ -11,50 +11,101 @@ class BoardGridWidget extends StatelessWidget {
     return Consumer<GameStateProvider>(
       builder: (context, gameState, child) {
         final board = gameState.board;
-        if (board == null) return const SizedBox.shrink();
+        if (board == null) {
+          return const Center(
+            child: Text(
+              'Loading board...',
+              style: TextStyle(color: Colors.white),
+            ),
+          );
+        }
 
         final screenWidth = MediaQuery.of(context).size.width;
         final screenHeight = MediaQuery.of(context).size.height;
         // Use smaller of width or available height, with padding considerations
-        final maxWidth = screenWidth * 0.85;
-        final maxHeight = screenHeight * 0.5; // Max 50% of screen height
-        final maxSize = maxWidth < maxHeight ? maxWidth : maxHeight;
+        final maxWidth = screenWidth * 0.9;
+        final maxHeight = screenHeight * 0.55; // Max 55% of screen height
+        final boardSize = maxWidth < maxHeight ? maxWidth : maxHeight;
 
         return Container(
-          width: maxSize,
-          height: maxSize,
+          width: boardSize,
+          height: boardSize,
           decoration: BoxDecoration(
-            color: Colors.grey[900],
-            borderRadius: BorderRadius.circular(8),
+            color: const Color(0xFF1a1a2e), // Dark blue-purple background
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.purple.withValues(alpha: 0.3),
+              width: 2,
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.purple.withValues(alpha: 0.3),
+                color: Colors.purple.withValues(alpha: 0.2),
                 blurRadius: 20,
                 spreadRadius: 2,
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
           child: Padding(
             padding: const EdgeInsets.all(4.0),
-            child: Column(
-              children: List.generate(board.size, (row) {
-                return Expanded(
-                  child: Row(
-                    children: List.generate(board.size, (col) {
-                      final block = board.grid[row][col];
-                      return Expanded(
-                        child: _BlockCell(block: block),
-                      );
-                    }),
-                  ),
-                );
-              }),
+            child: CustomPaint(
+              painter: GridLinesPainter(boardSize: board.size),
+              child: Column(
+                children: List.generate(board.size, (row) {
+                  return Expanded(
+                    child: Row(
+                      children: List.generate(board.size, (col) {
+                        final block = board.grid[row][col];
+                        return Expanded(
+                          child: _BlockCell(block: block),
+                        );
+                      }),
+                    ),
+                  );
+                }),
+              ),
             ),
           ),
         );
       },
     );
   }
+}
+
+/// Custom painter for grid lines (like original)
+class GridLinesPainter extends CustomPainter {
+  final int boardSize;
+
+  GridLinesPainter({required this.boardSize});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.08)
+      ..strokeWidth = 1;
+
+    final cellWidth = size.width / boardSize;
+    final cellHeight = size.height / boardSize;
+
+    // Draw vertical lines
+    for (int i = 0; i <= boardSize; i++) {
+      final x = i * cellWidth;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+
+    // Draw horizontal lines
+    for (int i = 0; i <= boardSize; i++) {
+      final y = i * cellHeight;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _BlockCell extends StatelessWidget {
@@ -68,6 +119,8 @@ class _BlockCell extends StatelessWidget {
   Widget build(BuildContext context) {
     Color cellColor;
     double opacity;
+    bool showGlow = false;
+    bool isBreaking = false;
 
     switch (block.type) {
       case BlockType.filled:
@@ -76,49 +129,101 @@ class _BlockCell extends StatelessWidget {
         break;
       case BlockType.hover:
         cellColor = block.color ?? Colors.blue;
-        opacity = 0.4;
+        opacity = 0.5;
         break;
       case BlockType.hoverBreakFilled:
         // Show filled blocks that will be cleared with a glow effect
         cellColor = block.hoverBreakColor ?? block.color ?? Colors.red;
-        opacity = 0.9;
+        opacity = 1.0;
+        showGlow = true;
+        isBreaking = true;
         break;
       case BlockType.hoverBreakEmpty:
         // Show empty spaces in lines that will be cleared
         cellColor = block.hoverBreakColor ?? Colors.red;
-        opacity = 0.5;
+        opacity = 0.3;
+        isBreaking = true;
         break;
       case BlockType.hoverBreak:
         cellColor = Colors.red;
         opacity = 0.7;
+        isBreaking = true;
         break;
       case BlockType.empty:
-        cellColor = Colors.grey[800]!;
+        cellColor = const Color(0xFF2a2a4a); // Subtle purple-gray
         opacity = 0.3;
     }
 
     return Container(
-      margin: const EdgeInsets.all(0.5),
+      margin: const EdgeInsets.all(1),
       decoration: BoxDecoration(
         color: cellColor.withValues(alpha: opacity),
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: BorderRadius.circular(3),
         border: block.type == BlockType.empty
-            ? Border.all(color: Colors.grey[700]!, width: 0.5)
-            : block.type == BlockType.hoverBreakFilled || 
-              block.type == BlockType.hoverBreakEmpty
-              ? Border.all(color: cellColor.withValues(alpha: 1.0), width: 1.5)
-              : null,
-        boxShadow: block.type == BlockType.hoverBreakFilled || 
-                  block.type == BlockType.hoverBreakEmpty
+            ? null // No border for empty - cleaner look
+            : block.type == BlockType.filled
+                ? Border.all(
+                    color: _lightenColor(cellColor, 0.2),
+                    width: 1,
+                  )
+                : isBreaking
+                    ? Border.all(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        width: 1.5,
+                      )
+                    : Border.all(
+                        color: cellColor.withValues(alpha: 0.5),
+                        width: 1,
+                      ),
+        boxShadow: showGlow
             ? [
                 BoxShadow(
-                  color: cellColor.withValues(alpha: 0.6),
-                  blurRadius: 4,
-                  spreadRadius: 1,
+                  color: cellColor.withValues(alpha: 0.8),
+                  blurRadius: 8,
+                  spreadRadius: 2,
                 ),
               ]
+            : block.type == BlockType.filled
+                ? [
+                    BoxShadow(
+                      color: cellColor.withValues(alpha: 0.3),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
+        // Add 3D effect for filled blocks
+        gradient: block.type == BlockType.filled
+            ? LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  _lightenColor(cellColor, 0.15),
+                  cellColor,
+                  _darkenColor(cellColor, 0.15),
+                ],
+                stops: const [0.0, 0.5, 1.0],
+              )
             : null,
       ),
+    );
+  }
+
+  Color _lightenColor(Color color, double amount) {
+    return Color.fromARGB(
+      color.alpha,
+      (color.red + (255 - color.red) * amount).round().clamp(0, 255),
+      (color.green + (255 - color.green) * amount).round().clamp(0, 255),
+      (color.blue + (255 - color.blue) * amount).round().clamp(0, 255),
+    );
+  }
+
+  Color _darkenColor(Color color, double amount) {
+    return Color.fromARGB(
+      color.alpha,
+      (color.red * (1 - amount)).round().clamp(0, 255),
+      (color.green * (1 - amount)).round().clamp(0, 255),
+      (color.blue * (1 - amount)).round().clamp(0, 255),
     );
   }
 }

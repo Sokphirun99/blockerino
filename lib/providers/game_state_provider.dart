@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import '../models/board.dart';
 import '../models/piece.dart';
 import '../models/game_mode.dart';
+import '../services/sound_service.dart';
 import 'settings_provider.dart';
+
+/// Callback type for line clear events with particle info
+typedef LineClearCallback = void Function(List<ClearedBlockInfo> clearedBlocks, int lineCount);
 
 class GameStateProvider extends ChangeNotifier {
   Board? _board;
@@ -13,6 +17,10 @@ class GameStateProvider extends ChangeNotifier {
   GameMode _gameMode = GameMode.classic;
   bool _gameOver = false;
   final SettingsProvider? _settingsProvider;
+  final SoundService _soundService = SoundService();
+  
+  /// Callback for when lines are cleared (for particle effects)
+  LineClearCallback? onLinesCleared;
 
   Board? get board => _board;
   List<Piece> get hand => _hand;
@@ -23,7 +31,13 @@ class GameStateProvider extends ChangeNotifier {
   int get movesUntilComboReset => _lastBrokenLine;
 
   GameStateProvider({SettingsProvider? settingsProvider})
-      : _settingsProvider = settingsProvider;
+      : _settingsProvider = settingsProvider {
+    // Sync sound service with settings
+    if (settingsProvider != null) {
+      _soundService.setHapticsEnabled(settingsProvider.hapticsEnabled);
+      _soundService.setSoundEnabled(settingsProvider.soundEnabled);
+    }
+  }
 
   void startGame(GameMode mode) {
     _gameMode = mode;
@@ -59,25 +73,45 @@ class GameStateProvider extends ChangeNotifier {
 
   bool placePiece(Piece piece, int x, int y) {
     if (_board == null) return false;
-    if (!_board!.canPlacePiece(piece, x, y)) return false;
+    if (!_board!.canPlacePiece(piece, x, y)) {
+      _soundService.playError();
+      return false;
+    }
 
     // Clear hover blocks and place the piece
     _board!.clearHoverBlocks();
     _board!.placePiece(piece, x, y, type: BlockType.filled);
+    
+    // Play place sound
+    _soundService.playPlace();
 
     // Calculate score from placing blocks
     final pieceBlockCount = piece.getBlockCount();
     _score += pieceBlockCount;
 
-    // Break lines and calculate combo
-    final linesBroken = _board!.breakLines();
+    // Break lines and calculate combo - use new method with info
+    final clearResult = _board!.breakLinesWithInfo();
+    final linesBroken = clearResult.lineCount;
+    
     if (linesBroken > 0) {
       _lastBrokenLine = 0;
       _combo += linesBroken;
+      
       // Score calculation matching blockerino-master:
       // linesBroken * boardSize * (combo / 2) * pieceBlockCount
       final config = GameModeConfig.fromMode(_gameMode);
       _score += (linesBroken * config.boardSize * (_combo / 2) * pieceBlockCount).round();
+      
+      // Play clear and combo sounds
+      _soundService.playClear(linesBroken);
+      if (_combo > 1) {
+        _soundService.playCombo(_combo);
+      }
+      
+      // Trigger particle effects callback
+      if (onLinesCleared != null && clearResult.clearedBlocks.isNotEmpty) {
+        onLinesCleared!(clearResult.clearedBlocks, linesBroken);
+      }
     } else {
       _lastBrokenLine++;
       final config = GameModeConfig.fromMode(_gameMode);
@@ -93,11 +127,13 @@ class GameStateProvider extends ChangeNotifier {
     if (_hand.isEmpty) {
       final config = GameModeConfig.fromMode(_gameMode);
       _hand = _generateRandomHand(config.handSize);
+      _soundService.playRefill();
     }
 
     // Check for game over
     if (!_board!.hasAnyValidMove(_hand)) {
       _gameOver = true;
+      _soundService.playGameOver();
       // Update high score
       _settingsProvider?.updateHighScore(_score);
     }

@@ -17,49 +17,51 @@ class DraggablePieceWidget extends StatefulWidget {
 class _DraggablePieceWidgetState extends State<DraggablePieceWidget> {
   @override
   Widget build(BuildContext context) {
+    // Calculate feedback offset to center piece on finger
+    final feedbackBlockSize = 30.0;
+    final pieceWidth = widget.piece.width * feedbackBlockSize;
+    final pieceHeight = widget.piece.height * feedbackBlockSize;
+    
     return Draggable<Piece>(
       data: widget.piece,
+      maxSimultaneousDrags: 1,
+      affinity: Axis.vertical, // Helps distinguish from scroll gestures
       feedback: Material(
         color: Colors.transparent,
-        child: Transform.scale(
-          scale: 1.3,
-          child: _PieceVisual(
-            piece: widget.piece,
-            blockSize: 32,
-            opacity: 0.95,
+        elevation: 8,
+        child: Transform.translate(
+          offset: Offset(-pieceWidth / 2, -pieceHeight - 30), // Center and lift above finger
+          child: Transform.scale(
+            scale: 1.3,
+            child: _PieceVisual(
+              piece: widget.piece,
+              blockSize: feedbackBlockSize,
+              opacity: 0.95,
+            ),
           ),
         ),
       ),
-      feedbackOffset: Offset(-widget.piece.width * 16, -widget.piece.height * 16),
       childWhenDragging: Opacity(
-        opacity: 0.2,
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: _PieceVisual(
-            piece: widget.piece,
-            blockSize: 28,
-            opacity: 0.3,
-          ),
-        ),
-      ),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
+        opacity: 0.3,
         child: _PieceVisual(
           piece: widget.piece,
-          blockSize: 28,
-          opacity: 1.0,
+          blockSize: 24,
+          opacity: 0.3,
         ),
       ),
+      child: _PieceVisual(
+        piece: widget.piece,
+        blockSize: 24,
+        opacity: 1.0,
+      ),
       onDragStarted: () {
-        // Optional: Add haptic feedback on drag start
         final settings = Provider.of<SettingsProvider>(context, listen: false);
         if (settings.hapticsEnabled) {
-          Vibration.vibrate(duration: 10);
+          Vibration.vibrate(duration: 20);
         }
       },
       onDragEnd: (details) {
         if (!details.wasAccepted) {
-          // Optional: Add haptic feedback on failed drop
           final settings = Provider.of<SettingsProvider>(context, listen: false);
           if (settings.hapticsEnabled) {
             Vibration.vibrate(duration: 50);
@@ -92,17 +94,35 @@ class _PieceVisual extends StatelessWidget {
             final isBlock = piece.shape[row][col];
             return Container(
               width: blockSize,
-            height: blockSize,
-            margin: const EdgeInsets.all(0.5),
-            decoration: isBlock
-                ? BoxDecoration(
-                    color: piece.color.withValues(alpha: opacity),
-                    borderRadius: BorderRadius.circular(2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: piece.color.withValues(alpha: 0.5),
-                        blurRadius: 3,
-                        spreadRadius: 0.5,
+              height: blockSize,
+              margin: EdgeInsets.zero,
+              decoration: isBlock
+                  ? BoxDecoration(
+                      borderRadius: BorderRadius.circular(3),
+                      border: Border.all(
+                        color: _lightenColor(piece.color, 0.3).withValues(alpha: opacity),
+                        width: 1,
+                      ),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          _lightenColor(piece.color, 0.2).withValues(alpha: opacity),
+                          piece.color.withValues(alpha: opacity),
+                          _darkenColor(piece.color, 0.2).withValues(alpha: opacity),
+                        ],
+                        stops: const [0.0, 0.5, 1.0],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: piece.color.withValues(alpha: 0.4 * opacity),
+                          blurRadius: 4,
+                          spreadRadius: 1,
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 2,
+                          offset: const Offset(1, 2),
                         ),
                       ],
                     )
@@ -111,6 +131,24 @@ class _PieceVisual extends StatelessWidget {
           }),
         );
       }),
+    );
+  }
+
+  Color _lightenColor(Color color, double amount) {
+    return Color.fromARGB(
+      color.alpha,
+      (color.red + (255 - color.red) * amount).round().clamp(0, 255),
+      (color.green + (255 - color.green) * amount).round().clamp(0, 255),
+      (color.blue + (255 - color.blue) * amount).round().clamp(0, 255),
+    );
+  }
+
+  Color _darkenColor(Color color, double amount) {
+    return Color.fromARGB(
+      color.alpha,
+      (color.red * (1 - amount)).round().clamp(0, 255),
+      (color.green * (1 - amount)).round().clamp(0, 255),
+      (color.blue * (1 - amount)).round().clamp(0, 255),
     );
   }
 }

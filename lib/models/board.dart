@@ -10,6 +10,30 @@ enum BlockType {
   hoverBreakEmpty, // Empty blocks in lines that will be cleared
 }
 
+/// Info about a cleared block for particle effects
+class ClearedBlockInfo {
+  final int row;
+  final int col;
+  final Color? color;
+
+  ClearedBlockInfo({
+    required this.row,
+    required this.col,
+    this.color,
+  });
+}
+
+/// Result of line clearing operation
+class LineClearResult {
+  final int lineCount;
+  final List<ClearedBlockInfo> clearedBlocks;
+
+  LineClearResult({
+    required this.lineCount,
+    required this.clearedBlocks,
+  });
+}
+
 class BoardBlock {
   final BlockType type;
   final Color? color;
@@ -186,9 +210,12 @@ class Board {
     }
   }
 
-  int breakLines() {
+  /// Break complete lines and return info about cleared blocks
+  /// Returns a tuple of (lineCount, clearedBlocks) for particle effects
+  LineClearResult breakLinesWithInfo() {
     List<int> rowsToClear = [];
     List<int> colsToClear = [];
+    List<ClearedBlockInfo> clearedBlocks = [];
 
     // Check rows
     for (int row = 0; row < size; row++) {
@@ -214,6 +241,37 @@ class Board {
       if (isFull) colsToClear.add(col);
     }
 
+    // Collect info about blocks to clear (before clearing)
+    Set<String> clearedPositions = {};
+    
+    for (int row in rowsToClear) {
+      for (int col = 0; col < size; col++) {
+        final key = '$row-$col';
+        if (!clearedPositions.contains(key)) {
+          clearedPositions.add(key);
+          clearedBlocks.add(ClearedBlockInfo(
+            row: row,
+            col: col,
+            color: grid[row][col].color,
+          ));
+        }
+      }
+    }
+
+    for (int col in colsToClear) {
+      for (int row = 0; row < size; row++) {
+        final key = '$row-$col';
+        if (!clearedPositions.contains(key)) {
+          clearedPositions.add(key);
+          clearedBlocks.add(ClearedBlockInfo(
+            row: row,
+            col: col,
+            color: grid[row][col].color,
+          ));
+        }
+      }
+    }
+
     // Clear lines
     for (int row in rowsToClear) {
       for (int col = 0; col < size; col++) {
@@ -227,7 +285,14 @@ class Board {
       }
     }
 
-    return rowsToClear.length + colsToClear.length;
+    return LineClearResult(
+      lineCount: rowsToClear.length + colsToClear.length,
+      clearedBlocks: clearedBlocks,
+    );
+  }
+
+  int breakLines() {
+    return breakLinesWithInfo().lineCount;
   }
 
   Board clone() {

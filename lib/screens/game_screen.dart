@@ -3,87 +3,292 @@ import 'package:provider/provider.dart';
 import 'package:vibration/vibration.dart';
 import '../providers/game_state_provider.dart';
 import '../providers/settings_provider.dart';
+import '../models/board.dart';
+import '../models/game_mode.dart';
 import '../widgets/board_grid_widget.dart';
 import '../widgets/hand_pieces_widget.dart';
 import '../widgets/game_hud_widget.dart';
 import '../widgets/draggable_piece_widget.dart';
+import '../widgets/particle_effect_widget.dart';
+import '../widgets/animated_background_widget.dart';
+import '../widgets/screen_shake_widget.dart';
 
-class GameScreen extends StatelessWidget {
+class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
+
+  @override
+  State<GameScreen> createState() => _GameScreenState();
+}
+
+class _GameScreenState extends State<GameScreen> {
+  final GlobalKey _boardKey = GlobalKey();
+  final List<ParticleData> _activeParticles = [];
+  int _particleIdCounter = 0;
+  bool _shouldShake = false;
+  String? _achievementMessage;
+  int _lastComboLevel = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Ensure game is started
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final gameState = Provider.of<GameStateProvider>(context, listen: false);
+      
+      // If board is null, start a classic game as fallback
+      if (gameState.board == null) {
+        gameState.startGame(GameMode.classic);
+      }
+      
+      // Set up line clear callback
+      gameState.onLinesCleared = _onLinesCleared;
+    });
+  }
+
+  void _onLinesCleared(List<ClearedBlockInfo> clearedBlocks, int lineCount) {
+    final boardBox = _boardKey.currentContext?.findRenderObject() as RenderBox?;
+    if (boardBox == null) return;
+
+    final gameState = Provider.of<GameStateProvider>(context, listen: false);
+    final board = gameState.board;
+    if (board == null) return;
+
+    // Calculate block size
+    final boardSize = boardBox.size;
+    final blockSize = (boardSize.width - 8) / board.size; // Account for padding
+    final boardPosition = boardBox.localToGlobal(Offset.zero);
+
+    // Trigger screen shake for big clears (3+ lines)
+    if (lineCount >= 3) {
+      setState(() {
+        _shouldShake = true;
+      });
+    }
+
+    // Show achievement messages
+    _checkAchievements(lineCount, gameState.combo);
+
+    // Create particles for each cleared block
+    setState(() {
+      for (final blockInfo in clearedBlocks) {
+        final particleX = boardPosition.dx + 4 + (blockInfo.col * blockSize) + (blockSize / 2);
+        final particleY = boardPosition.dy + 4 + (blockInfo.row * blockSize) + (blockSize / 2);
+        
+        _activeParticles.add(ParticleData(
+          id: _particleIdCounter++,
+          position: Offset(particleX, particleY),
+          color: blockInfo.color ?? Colors.white,
+        ));
+      }
+    });
+  }
+
+  void _checkAchievements(int lineCount, int combo) {
+    String? message;
+    
+    // Check for special line clears
+    if (lineCount >= 4) {
+      message = '🔥 QUAD CLEAR! 🔥';
+    } else if (lineCount == 3) {
+      message = '⚡ TRIPLE CLEAR! ⚡';
+    }
+
+    // Check for combo milestones
+    if (combo >= 20 && _lastComboLevel < 20) {
+      message = '🌟 MEGA COMBO x$combo! 🌟';
+    } else if (combo >= 10 && _lastComboLevel < 10) {
+      message = '✨ SUPER COMBO x$combo! ✨';
+    } else if (combo >= 5 && _lastComboLevel < 5) {
+      message = '💫 COMBO x$combo! 💫';
+    }
+
+    _lastComboLevel = combo;
+
+    if (message != null) {
+      setState(() {
+        _achievementMessage = message;
+      });
+      
+      // Hide message after 2 seconds
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            _achievementMessage = null;
+          });
+        }
+      });
+    }
+  }
+
+  void _removeParticle(int id) {
+    setState(() {
+      _activeParticles.removeWhere((p) => p.id == id);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.black,
-              Colors.purple.shade900.withValues(alpha: 0.2),
-            ],
+      body: Stack(
+        children: [
+          // Animated background
+          const Positioned.fill(
+            child: AnimatedBackgroundWidget(),
           ),
-        ),
-        child: SafeArea(
-          child: Consumer<GameStateProvider>(
-            builder: (context, gameState, child) {
-              if (gameState.gameOver) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _showGameOverDialog(context, gameState);
-                });
-              }
-              
-              return Column(
-                children: [
-                  // Header with back button and score
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.arrow_back, color: Colors.white),
-                          onPressed: () => Navigator.pop(context),
+          
+          // Main game content with screen shake
+          ScreenShakeWidget(
+            shouldShake: _shouldShake,
+            intensity: 8.0,
+            onShakeComplete: () {
+              setState(() {
+                _shouldShake = false;
+              });
+            },
+            child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  const Color(0xFF0f0f1a),
+                  Colors.purple.shade900.withValues(alpha: 0.3),
+                  const Color(0xFF1a0a2e),
+                ],
+              ),
+            ),
+            child: SafeArea(
+              child: Consumer<GameStateProvider>(
+                builder: (context, gameState, child) {
+                  if (gameState.gameOver) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _showGameOverDialog(context, gameState);
+                    });
+                  }
+                  
+                  return Column(
+                    children: [
+                      // Header with back button and score
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.arrow_back, color: Colors.white),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                            const GameHudWidget(),
+                          ],
                         ),
-                        const GameHudWidget(),
+                      ),
+                      
+                      const SizedBox(height: 4),
+                      
+                      // Game Board with DragTarget - wrapped in Expanded to constrain size
+                      Expanded(
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                            child: BoardDragTarget(
+                              child: KeyedSubtree(
+                                key: _boardKey,
+                                child: const BoardGridWidget(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 8),
+                      
+                      // Hand Pieces
+                      const HandPiecesWidget(),
+                      
+                      const SizedBox(height: 8),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+          ),
+          
+          // Achievement notification
+          if (_achievementMessage != null)
+            Positioned(
+              top: 120,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  duration: const Duration(milliseconds: 300),
+                  builder: (context, value, child) {
+                    return Transform.scale(
+                      scale: value,
+                      child: Opacity(
+                        opacity: value,
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.purple.shade700,
+                          Colors.purple.shade900,
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: const Color(0xFFFFE66D),
+                        width: 2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.purple.withOpacity(0.5),
+                          blurRadius: 20,
+                          spreadRadius: 5,
+                        ),
                       ],
                     ),
-                  ),
-                  
-                  const SizedBox(height: 8),
-                  
-                  // Game Board with DragTarget - wrapped in Expanded to constrain size
-                  Expanded(
-                    flex: 5,
-                    child: Center(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          return const BoardDragTarget(
-                            child: BoardGridWidget(),
-                          );
-                        },
+                    child: Text(
+                      _achievementMessage!,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
                       ),
                     ),
                   ),
-                  
-                  const SizedBox(height: 8),
-                  
-                  // Hand Pieces
-                  const HandPiecesWidget(),
-                  
-                  const SizedBox(height: 16),
-                ],
-              );
-            },
-          ),
-        ),
+                ),
+              ),
+            ),
+          
+          // Particle effects overlay
+          ..._activeParticles.map((particle) => Positioned.fill(
+            child: IgnorePointer(
+              child: ParticleEffectWidget(
+                key: ValueKey(particle.id),
+                position: particle.position,
+                color: particle.color,
+                blockSize: 20,
+                onComplete: () => _removeParticle(particle.id),
+              ),
+            ),
+          )),
+        ],
       ),
     );
   }
 
   void _showGameOverDialog(BuildContext context, GameStateProvider gameState) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final isHighScore = gameState.score >= settings.highScore;
     
     if (settings.hapticsEnabled) {
       Vibration.vibrate(duration: 500);
@@ -92,15 +297,43 @@ class GameScreen extends StatelessWidget {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: Text(
-          'GAME OVER',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: const Color(0xFFFF6B6B),
-                fontSize: 24,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1a1a2e),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: isHighScore ? const Color(0xFFFFE66D) : Colors.purple.shade700,
+            width: 2,
+          ),
+        ),
+        title: Column(
+          children: [
+            if (isHighScore) ...[
+              const Icon(
+                Icons.emoji_events,
+                color: Color(0xFFFFE66D),
+                size: 48,
               ),
-          textAlign: TextAlign.center,
+              const SizedBox(height: 8),
+              Text(
+                'NEW HIGH SCORE!',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: const Color(0xFFFFE66D),
+                      fontSize: 14,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+            ],
+            Text(
+              'GAME OVER',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: const Color(0xFFFF6B6B),
+                    fontSize: 28,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -117,26 +350,57 @@ class GameScreen extends StatelessWidget {
               '${gameState.score}',
               style: Theme.of(context).textTheme.displayLarge?.copyWith(
                     color: Colors.white,
-                    fontSize: 48,
+                    fontSize: 56,
                   ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.star, color: Color(0xFFFFE66D), size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Best: ${settings.highScore}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.white70,
+                          fontSize: 14,
+                        ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
+        actionsAlignment: MainAxisAlignment.spaceEvenly,
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context); // Close dialog
+              Navigator.pop(dialogContext); // Close dialog
               Navigator.pop(context); // Return to menu
             },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white70,
+            ),
             child: const Text('MENU'),
           ),
           ElevatedButton(
             onPressed: () {
               gameState.resetGame();
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF4ECDC4),
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             child: const Text('PLAY AGAIN'),
           ),

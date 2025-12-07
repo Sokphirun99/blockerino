@@ -13,22 +13,22 @@ class HandPiecesWidget extends StatelessWidget {
         final hand = gameState.hand;
         
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.symmetric(horizontal: 8),
           constraints: const BoxConstraints(
-            minHeight: 120,
-            maxHeight: 200,
+            minHeight: 140,
+            maxHeight: 220,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: hand.map((piece) {
-              return Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  constraints: const BoxConstraints(
-                    maxWidth: 140,
-                    maxHeight: 180,
-                  ),
+              return Expanded(
+                child: Center(
                   child: DraggablePieceWidget(piece: piece),
                 ),
               );

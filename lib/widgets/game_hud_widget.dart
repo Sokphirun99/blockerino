@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_state_provider.dart';
+import '../providers/settings_provider.dart';
 import '../models/game_mode.dart';
 
 class GameHudWidget extends StatelessWidget {
@@ -8,15 +9,40 @@ class GameHudWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<GameStateProvider>(
-      builder: (context, gameState, child) {
+    return Consumer2<GameStateProvider, SettingsProvider>(
+      builder: (context, gameState, settings, child) {
         final config = GameModeConfig.fromMode(gameState.gameMode);
         final movesLeft = config.handSize - gameState.movesUntilComboReset;
         final comboProgress = gameState.combo > 0 ? movesLeft / config.handSize : 0.0;
+        final isNewHighScore = gameState.score > settings.highScore;
         
         return Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
+            // High score indicator
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.star,
+                  color: isNewHighScore 
+                      ? const Color(0xFFFFE66D) 
+                      : Colors.white38,
+                  size: 12,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${isNewHighScore ? gameState.score : settings.highScore}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: isNewHighScore 
+                            ? const Color(0xFFFFE66D) 
+                            : Colors.white38,
+                        fontSize: 10,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
             Text(
               'SCORE',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -28,7 +54,7 @@ class GameHudWidget extends StatelessWidget {
               '${gameState.score}',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     color: Colors.white,
-                    fontSize: 24,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold,
                   ),
             ),
