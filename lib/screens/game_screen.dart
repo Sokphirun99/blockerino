@@ -57,12 +57,21 @@ class _GameScreenState extends State<GameScreen> {
       _initialized = true;
       try {
         final gameState = Provider.of<GameStateProvider>(context, listen: false);
+        final settings = Provider.of<SettingsProvider>(context, listen: false);
         
         // If board is null, start game with appropriate mode
         if (gameState.board == null) {
           // Use story level's game mode if provided, otherwise classic
           final mode = widget.storyLevel?.gameMode ?? GameMode.classic;
           gameState.startGame(mode);
+          
+          // Track game start
+          settings.analyticsService.logGameStart(mode.name);
+          if (widget.storyLevel != null) {
+            settings.analyticsService.logScreenView('game_story_level_${widget.storyLevel!.levelNumber}');
+          } else {
+            settings.analyticsService.logScreenView('game_${mode.name}');
+          }
         }
         
         // Set up line clear callback
@@ -319,6 +328,15 @@ class _GameScreenState extends State<GameScreen> {
   void _showGameOverDialog(BuildContext context, GameStateProvider gameState) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final isHighScore = gameState.score >= settings.highScore;
+    
+    // Track game end analytics
+    final mode = widget.storyLevel?.gameMode ?? gameState.gameMode;
+    settings.analyticsService.logGameEnd(
+      gameMode: mode.name,
+      score: gameState.score,
+      linesCleared: 0, // We don't track total lines cleared yet
+      duration: 0, // We don't track duration yet, could add timer
+    );
     
     // Check if this is a story level and if objectives are met
     final isStoryMode = widget.storyLevel != null;

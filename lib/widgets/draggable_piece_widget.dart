@@ -60,10 +60,13 @@ class _DraggablePieceWidgetState extends State<DraggablePieceWidget> {
           opacity: 0.3,
         ),
       ),
-      child: _PieceVisual(
-        piece: widget.piece,
-        blockSize: 24,
-        opacity: 1.0,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: _PieceVisual(
+          piece: widget.piece,
+          blockSize: 24,
+          opacity: 1.0,
+        ),
       ),
       onDragStarted: () {
         final settings = Provider.of<SettingsProvider>(context, listen: false);
