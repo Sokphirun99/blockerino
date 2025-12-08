@@ -35,18 +35,3 @@ flutter:
   uses-material-design: true
   assets:
     - assets/fonts/
-
-  fonts:
-    - family: PressStart2P
-      fonts:
-        - asset: assets/fonts/PressStart2P-Regular.ttf
-
-    - family: Silkscreen
-      fonts:
-        - asset: assets/fonts/Silkscreen-Regular.ttf
-        - asset: assets/fonts/Silkscreen-Bold.ttf
-          weight: 700
-
-    - family: SpaceMono
-      fonts:
-        - asset: assets/fonts/SpaceMono-Regular.ttf

@@ -38,12 +38,18 @@ class MainMenuScreen extends StatelessWidget {
               ),
             ),
             child: SafeArea(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 20.0),
-                  child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                      ),
+                      child: IntrinsicHeight(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                const SizedBox(height: 40),
                 // Title
                 Text(
                   'BLOCKERINO',
@@ -207,15 +213,19 @@ class MainMenuScreen extends StatelessWidget {
                         ),
                   ),
                 ),
+                const SizedBox(height: 40),
               ],
-            ), // Column
-                ), // Padding
-              ), // SingleChildScrollView
+                        ), // Column
+                      ), // IntrinsicHeight
+                    ), // ConstrainedBox
+                  ); // SingleChildScrollView
+                },
+              ), // LayoutBuilder
             ), // SafeArea
           ), // Container
-        ],
-      ),
-    );
+        ], // Stack children
+      ), // Stack
+    ); // Scaffold
   }
 
   void _startGame(BuildContext context, GameMode mode) {
