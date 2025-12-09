@@ -6,6 +6,7 @@ import '../models/story_level.dart';
 import '../services/firebase_auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/analytics_service.dart';
+import '../services/database_helper.dart';
 
 class SettingsProvider extends ChangeNotifier {
   bool _soundEnabled = true;
@@ -24,6 +25,7 @@ class SettingsProvider extends ChangeNotifier {
   final FirebaseAuthService _authService = FirebaseAuthService();
   final FirestoreService _firestoreService = FirestoreService();
   final AnalyticsService _analyticsService = AnalyticsService();
+  final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
   bool get soundEnabled => _soundEnabled;
   bool get hapticsEnabled => _hapticsEnabled;
@@ -74,6 +76,8 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    
+    // Load simple settings from SharedPreferences
     _soundEnabled = prefs.getBool('soundEnabled') ?? true;
     _hapticsEnabled = prefs.getBool('hapticsEnabled') ?? true;
     _animationsEnabled = prefs.getBool('animationsEnabled') ?? true;
@@ -84,19 +88,52 @@ class SettingsProvider extends ChangeNotifier {
     _completedChallengeIds = prefs.getStringList('completedChallenges') ?? [];
     _currentStoryLevel = prefs.getInt('currentStoryLevel') ?? 1;
     
-    // Load power-up inventory
-    for (var powerUp in PowerUp.allPowerUps) {
-      final key = 'powerup_${powerUp.type.name}';
-      _powerUpInventory[powerUp.type] = prefs.getInt(key) ?? 0;
-    }
+    // Migrate data from SharedPreferences to SQLite if needed
+    await _migrateToSQLite(prefs);
     
-    // Load story level stars
-    for (var level in StoryLevel.allLevels) {
-      final key = 'story_stars_${level.levelNumber}';
-      _storyLevelStars[level.levelNumber] = prefs.getInt(key) ?? 0;
-    }
+    // Load complex data from SQLite
+    _powerUpInventory = await _dbHelper.getAllInventory();
+    _storyLevelStars = await _dbHelper.getAllLevelStars();
     
     notifyListeners();
+  }
+
+  /// Migrate data from SharedPreferences to SQLite (one-time migration)
+  Future<void> _migrateToSQLite(SharedPreferences prefs) async {
+    final migrated = prefs.getBool('migrated_to_sqlite') ?? false;
+    if (migrated) return;
+
+    try {
+      // Migrate power-up inventory
+      for (var powerUp in PowerUp.allPowerUps) {
+        final key = 'powerup_${powerUp.type.name}';
+        final count = prefs.getInt(key) ?? 0;
+        if (count > 0) {
+          await _dbHelper.setPowerUpCount(powerUp.type, count);
+          await prefs.remove(key); // Clean up old data
+        }
+      }
+
+      // Migrate story level stars
+      for (var level in StoryLevel.allLevels) {
+        final key = 'story_stars_${level.levelNumber}';
+        final stars = prefs.getInt(key) ?? 0;
+        if (stars > 0) {
+          await _dbHelper.updateLevelProgress(
+            levelNumber: level.levelNumber,
+            stars: stars,
+            score: 0,
+          );
+          await prefs.remove(key); // Clean up old data
+        }
+      }
+
+      // Mark migration as complete
+      await prefs.setBool('migrated_to_sqlite', true);
+      debugPrint('Successfully migrated data to SQLite');
+    } catch (e) {
+      debugPrint('Error migrating to SQLite: $e');
+    }
   }
 
   // Sync local data to Firestore
@@ -202,19 +239,18 @@ class SettingsProvider extends ChangeNotifier {
     return _unlockedThemeIds.contains(themeId);
   }
 
-  // Power-up management
+  // Power-up management (using SQLite)
   Future<void> addPowerUp(PowerUpType type, int count) async {
-    _powerUpInventory[type] = (_powerUpInventory[type] ?? 0) + count;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('powerup_${type.name}', _powerUpInventory[type]!);
+    await _dbHelper.addPowerUp(type, count);
+    _powerUpInventory = await _dbHelper.getAllInventory();
     notifyListeners();
   }
 
   Future<bool> usePowerUp(PowerUpType type) async {
-    if ((_powerUpInventory[type] ?? 0) > 0) {
-      _powerUpInventory[type] = _powerUpInventory[type]! - 1;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('powerup_${type.name}', _powerUpInventory[type]!);
+    final success = await _dbHelper.usePowerUp(type);
+    
+    if (success) {
+      _powerUpInventory = await _dbHelper.getAllInventory();
       
       // Track power-up usage
       await _analyticsService.logPowerUpUsed(type.name);
@@ -256,11 +292,21 @@ class SettingsProvider extends ChangeNotifier {
     return _completedChallengeIds.contains(challengeId);
   }
 
-  // Story mode management
+  // Story mode management (using SQLite)
   Future<void> completeStoryLevel(int levelNumber, int stars, int coinReward) async {
-    final currentStars = _storyLevelStars[levelNumber] ?? 0;
+    final currentStars = await _dbHelper.getLevelStars(levelNumber);
+    
     if (stars > currentStars) {
-      _storyLevelStars[levelNumber] = stars;
+      // Update in SQLite
+      await _dbHelper.updateLevelProgress(
+        levelNumber: levelNumber,
+        stars: stars,
+        score: 0, // Score can be added later if needed
+      );
+      
+      // Refresh local cache
+      _storyLevelStars = await _dbHelper.getAllLevelStars();
+      
       await addCoins(coinReward);
       
       // Unlock next level
@@ -269,9 +315,6 @@ class SettingsProvider extends ChangeNotifier {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setInt('currentStoryLevel', _currentStoryLevel);
       }
-      
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('story_stars_$levelNumber', stars);
       
       // Sync to Firestore
       final uid = _authService.currentUser?.uid;

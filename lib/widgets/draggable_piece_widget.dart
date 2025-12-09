@@ -189,8 +189,6 @@ class BoardDragTarget extends StatelessWidget {
         // Convert to grid coordinates with proper padding consideration
         final board = gameState.board!;
         final piece = details.data;
-        final boardSize = BoardConfig.getSize(context);
-        final effectiveSize = BoardConfig.getEffectiveSize(context);
         final blockSize = BoardConfig.getBlockSize(context, board.size);
         
         // Adjust for container padding and border

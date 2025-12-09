@@ -55,17 +55,12 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
               ),
             ),
             child: SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return SingleChildScrollView(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight,
-                      ),
-                      child: IntrinsicHeight(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                 // User Profile Section
                 _buildProfileSection(context, settings),
                 
@@ -236,14 +231,11 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 ),
                 const SizedBox(height: 40),
               ],
-                        ), // Column
-                      ), // IntrinsicHeight
-                    ), // ConstrainedBox
-                  ); // SingleChildScrollView
-                },
-              ), // LayoutBuilder
-            ), // SafeArea
-          ), // Container
+            ), // Column
+          ), // Padding
+        ), // SingleChildScrollView
+      ), // SafeArea
+    ), // Container
         ], // Stack children
       ), // Stack
     ); // Scaffold

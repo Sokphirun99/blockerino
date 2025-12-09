@@ -77,7 +77,7 @@ class AnalyticsService {
   }) async {
     try {
       await _analytics.logEvent(
-        name: 'in_app_purchase',
+        name: 'store_purchase',
         parameters: {
           'item_name': itemName,
           'coin_cost': coinCost,
