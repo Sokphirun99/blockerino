@@ -1,13 +1,32 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../models/daily_challenge.dart';
 import '../models/game_mode.dart';
-import '../providers/settings_provider.dart';
+import '../cubits/settings/settings_cubit.dart';
+import '../cubits/settings/settings_state.dart';
 import 'game_screen.dart';
 import '../widgets/common_card_widget.dart';
+import '../widgets/shared_ui_components.dart';
 
-class DailyChallengeScreen extends StatelessWidget {
+class DailyChallengeScreen extends StatefulWidget {
   const DailyChallengeScreen({super.key});
+
+  @override
+  State<DailyChallengeScreen> createState() => _DailyChallengeScreenState();
+}
+
+class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
+  bool _analyticsLogged = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_analyticsLogged) {
+      _analyticsLogged = true;
+      final settings = context.read<SettingsCubit>();
+      settings.analyticsService.logScreenView('daily_challenge');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,16 +38,10 @@ class DailyChallengeScreen extends StatelessWidget {
         title: const Text('Daily Challenge', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF1a1a2e),
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1a1a2e), Color(0xFF0f0f1e)],
-          ),
-        ),
-        child: Consumer<SettingsProvider>(
-          builder: (context, settings, child) {
+      body: GameGradientBackground(
+        child: BlocBuilder<SettingsCubit, SettingsState>(
+          builder: (context, state) {
+            final settings = context.read<SettingsCubit>();
             final isCompleted = settings.isChallengeCompleted(todayChallenge.id);
             
             return SingleChildScrollView(
@@ -100,7 +113,7 @@ class DailyChallengeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildChallengeCard(BuildContext context, DailyChallenge challenge, bool isCompleted, SettingsProvider settings) {
+  Widget _buildChallengeCard(BuildContext context, DailyChallenge challenge, bool isCompleted, SettingsCubit settings) {
     return GradientCard(
       padding: const EdgeInsets.all(20),
       borderRadius: 20,
@@ -162,7 +175,8 @@ class DailyChallengeScreen extends StatelessWidget {
               ),
               const Spacer(),
               if (!isCompleted)
-                ElevatedButton(
+                PrimaryActionButton(
+                  text: 'START',
                   onPressed: () {
                     Navigator.push(
                       context,
@@ -171,18 +185,6 @@ class DailyChallengeScreen extends StatelessWidget {
                       ),
                     );
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF9d4edd),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  child: const Text(
-                    'START',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
                 ),
               if (isCompleted)
                 Container(
@@ -249,7 +251,7 @@ class DailyChallengeScreen extends StatelessWidget {
     }
   }
 
-  Widget _buildPreviousChallenges(BuildContext context, DateTime today, SettingsProvider settings) {
+  Widget _buildPreviousChallenges(BuildContext context, DateTime today, SettingsCubit settings) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../models/story_level.dart';
 import '../models/game_mode.dart';
-import '../providers/settings_provider.dart';
+import '../cubits/settings/settings_cubit.dart';
+import '../cubits/settings/settings_state.dart';
 import 'game_screen.dart';
 import '../widgets/common_card_widget.dart';
+import '../widgets/shared_ui_components.dart';
 
 class StoryModeScreen extends StatefulWidget {
   const StoryModeScreen({super.key});
@@ -21,7 +23,7 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
     super.didChangeDependencies();
     if (!_analyticsLogged) {
       _analyticsLogged = true;
-      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      final settings = context.read<SettingsCubit>();
       settings.analyticsService.logScreenView('story_mode');
     }
   }
@@ -33,27 +35,21 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
         title: const Text('Story Mode', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF1a1a2e),
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1a1a2e), Color(0xFF0f0f1e)],
-          ),
-        ),
-        child: Consumer<SettingsProvider>(
-          builder: (context, settings, child) {
+      body: GameGradientBackground(
+        child: BlocBuilder<SettingsCubit, SettingsState>(
+          builder: (context, state) {
+            final settings = context.read<SettingsCubit>();
             return Column(
               children: [
-                _buildProgressHeader(settings),
+                _buildProgressHeader(state),
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
                     itemCount: StoryLevel.allLevels.length,
                     itemBuilder: (context, index) {
                       final level = StoryLevel.allLevels[index];
-                      final isUnlocked = settings.isStoryLevelUnlocked(level.levelNumber);
-                      final stars = settings.getStarsForLevel(level.levelNumber);
+                      final isUnlocked = index == 0 || (state.storyLevelStars[index] ?? 0) > 0 || index + 1 <= state.currentStoryLevel;
+                      final stars = state.storyLevelStars[level.levelNumber] ?? 0;
                       
                       return _buildLevelCard(context, level, isUnlocked, stars, settings);
                     },
@@ -67,8 +63,8 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
     );
   }
 
-  Widget _buildProgressHeader(SettingsProvider settings) {
-    final totalStars = settings.totalStarsEarned;
+  Widget _buildProgressHeader(SettingsState state) {
+    final totalStars = state.storyLevelStars.values.fold(0, (sum, stars) => sum + stars);
     final maxStars = StoryLevel.allLevels.length * 3;
     
     return Container(
@@ -128,7 +124,7 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
     );
   }
 
-  Widget _buildLevelCard(BuildContext context, StoryLevel level, bool isUnlocked, int stars, SettingsProvider settings) {
+  Widget _buildLevelCard(BuildContext context, StoryLevel level, bool isUnlocked, int stars, SettingsCubit settings) {
     return GradientCard(
       margin: const EdgeInsets.only(bottom: 16),
       borderRadius: 20,
@@ -207,18 +203,11 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      const Text('🪙', style: TextStyle(fontSize: 20)),
-                      const SizedBox(width: 4),
-                      Text(
-                        '+${level.coinReward}',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFffd700),
-                        ),
-                      ),
+                      RewardDisplay(coins: level.coinReward),
                       const Spacer(),
-                      ElevatedButton(
+                      PrimaryActionButton(
+                        text: 'PLAY',
+                        backgroundColor: _getDifficultyColor(level.difficulty),
                         onPressed: () {
                           Navigator.push(
                             context,
@@ -227,18 +216,6 @@ class _StoryModeScreenState extends State<StoryModeScreen> {
                             ),
                           );
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _getDifficultyColor(level.difficulty),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                        ),
-                        child: const Text(
-                          'PLAY',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
                       ),
                     ],
                   ),

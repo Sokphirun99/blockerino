@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../config/app_config.dart';
 import '../models/power_up.dart';
 import '../models/theme.dart';
-import '../providers/settings_provider.dart';
+import '../cubits/settings/settings_cubit.dart';
+import '../cubits/settings/settings_state.dart';
 import '../widgets/common_card_widget.dart';
+import '../widgets/shared_ui_components.dart';
 
 class StoreScreen extends StatefulWidget {
   const StoreScreen({super.key});
@@ -28,7 +30,7 @@ class _StoreScreenState extends State<StoreScreen> with SingleTickerProviderStat
     super.didChangeDependencies();
     if (!_analyticsLogged) {
       _analyticsLogged = true;
-      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      final settings = context.read<SettingsCubit>();
       settings.analyticsService.logScreenView('store');
     }
   }
@@ -54,14 +56,7 @@ class _StoreScreenState extends State<StoreScreen> with SingleTickerProviderStat
           indicatorColor: AppConfig.primaryColor,
         ),
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [AppConfig.dialogBackground, AppConfig.gameBackgroundTop],
-          ),
-        ),
+      body: GameGradientBackground(
         child: Column(
           children: [
             _buildCoinDisplay(),
@@ -81,47 +76,20 @@ class _StoreScreenState extends State<StoreScreen> with SingleTickerProviderStat
   }
 
   Widget _buildCoinDisplay() {
-    return Consumer<SettingsProvider>(
-      builder: (context, settings, child) {
+    return BlocBuilder<SettingsCubit, SettingsState>(
+      builder: (context, state) {
         return Container(
           margin: const EdgeInsets.all(16),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppConfig.accentColor, AppConfig.coinGradientEnd],
-            ),
-            borderRadius: BorderRadius.circular(30),
-            boxShadow: [
-              BoxShadow(
-                color: AppConfig.accentColor.withValues(alpha: 0.3),
-                blurRadius: 12,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('🪙', style: TextStyle(fontSize: 24)),
-              const SizedBox(width: 8),
-              Text(
-                '${settings.coins}',
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
-              ),
-            ],
-          ),
+          child: CoinDisplay(coins: state.coins),
         );
       },
     );
   }
 
   Widget _buildPowerUpsTab() {
-    return Consumer<SettingsProvider>(
-      builder: (context, settings, child) {
+    return BlocBuilder<SettingsCubit, SettingsState>(
+      builder: (context, state) {
+        final settings = context.read<SettingsCubit>();
         return GridView.builder(
           padding: const EdgeInsets.all(16),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -133,7 +101,7 @@ class _StoreScreenState extends State<StoreScreen> with SingleTickerProviderStat
           itemCount: PowerUp.allPowerUps.length,
           itemBuilder: (context, index) {
             final powerUp = PowerUp.allPowerUps[index];
-            final count = settings.getPowerUpCount(powerUp.type);
+            final count = state.powerUpInventory[powerUp.type] ?? 0;
             
             return _buildPowerUpCard(powerUp, count, settings);
           },
@@ -142,7 +110,7 @@ class _StoreScreenState extends State<StoreScreen> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildPowerUpCard(PowerUp powerUp, int count, SettingsProvider settings) {
+  Widget _buildPowerUpCard(PowerUp powerUp, int count, SettingsCubit settings) {
     return GradientCard(
       gradientColors: [
         AppConfig.cardBackground,
@@ -204,21 +172,9 @@ class _StoreScreenState extends State<StoreScreen> with SingleTickerProviderStat
                   coinCost: powerUp.cost,
                 );
                 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('${powerUp.name} purchased!'),
-                    backgroundColor: Colors.green,
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
+                SharedSnackBars.showSuccess(context, '${powerUp.name} purchased!');
               } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Not enough coins!'),
-                    backgroundColor: Colors.red,
-                    duration: Duration(seconds: 2),
-                  ),
-                );
+                SharedSnackBars.showNotEnoughCoins(context);
               }
             },
             style: ElevatedButton.styleFrom(
@@ -241,8 +197,9 @@ class _StoreScreenState extends State<StoreScreen> with SingleTickerProviderStat
   }
 
   Widget _buildThemesTab() {
-    return Consumer<SettingsProvider>(
-      builder: (context, settings, child) {
+    return BlocBuilder<SettingsCubit, SettingsState>(
+      builder: (context, state) {
+        final settings = context.read<SettingsCubit>();
         return GridView.builder(
           padding: const EdgeInsets.all(16),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -254,8 +211,8 @@ class _StoreScreenState extends State<StoreScreen> with SingleTickerProviderStat
           itemCount: GameTheme.allThemes.length,
           itemBuilder: (context, index) {
             final theme = GameTheme.allThemes[index];
-            final isUnlocked = settings.isThemeUnlocked(theme.id);
-            final isCurrent = settings.currentThemeId == theme.id;
+            final isUnlocked = state.unlockedThemeIds.contains(theme.id);
+            final isCurrent = state.currentThemeId == theme.id;
             
             return _buildThemeCard(theme, isUnlocked, isCurrent, settings);
           },
@@ -264,7 +221,7 @@ class _StoreScreenState extends State<StoreScreen> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildThemeCard(GameTheme theme, bool isUnlocked, bool isCurrent, SettingsProvider settings) {
+  Widget _buildThemeCard(GameTheme theme, bool isUnlocked, bool isCurrent, SettingsCubit settings) {
     return GestureDetector(
       onTap: () async {
         if (isCurrent) return;
@@ -272,13 +229,7 @@ class _StoreScreenState extends State<StoreScreen> with SingleTickerProviderStat
         if (isUnlocked) {
           await settings.setTheme(theme.id);
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Theme "${theme.name}" activated!'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
-            ),
-          );
+          SharedSnackBars.showSuccess(context, 'Theme "${theme.name}" activated!');
         } else {
           final success = await settings.unlockTheme(theme.id);
           if (!mounted) return;
@@ -293,21 +244,9 @@ class _StoreScreenState extends State<StoreScreen> with SingleTickerProviderStat
             );
             
             if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Theme "${theme.name}" unlocked!'),
-                backgroundColor: Colors.green,
-                duration: const Duration(seconds: 2),
-              ),
-            );
+            SharedSnackBars.showSuccess(context, 'Theme "${theme.name}" unlocked!');
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Not enough coins!'),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 2),
-              ),
-            );
+            SharedSnackBars.showNotEnoughCoins(context);
           }
         }
       },

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../config/app_config.dart';
-import '../providers/settings_provider.dart';
+import '../cubits/settings/settings_cubit.dart';
+import '../cubits/settings/settings_state.dart';
 import '../services/app_localizations.dart';
 import '../widgets/common_card_widget.dart';
 
@@ -20,7 +21,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.didChangeDependencies();
     if (!_analyticsLogged) {
       _analyticsLogged = true;
-      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      final settings = context.read<SettingsCubit>();
       settings.analyticsService.logScreenView('settings');
     }
   }
@@ -42,8 +43,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             colors: [AppConfig.dialogBackground, AppConfig.gameBackgroundTop],
           ),
         ),
-        child: Consumer<SettingsProvider>(
-          builder: (context, settings, child) {
+        child: BlocBuilder<SettingsCubit, SettingsState>(
+          builder: (context, state) {
+            final settings = context.read<SettingsCubit>();
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -53,7 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.volume_up,
                   title: 'Sound Effects',
                   subtitle: 'Play sound effects during gameplay',
-                  value: settings.soundEnabled,
+                  value: state.soundEnabled,
                   onChanged: (value) => settings.toggleSound(),
                 ),
                 const SizedBox(height: 12),
@@ -61,7 +63,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.phone_android,
                   title: 'Haptic Feedback',
                   subtitle: 'Vibrate on piece placement and combos',
-                  value: settings.hapticsEnabled,
+                  value: state.hapticsEnabled,
                   onChanged: (value) => settings.toggleHaptics(),
                 ),
                 const SizedBox(height: 12),
@@ -69,7 +71,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.animation,
                   title: 'Animations',
                   subtitle: 'Enable smooth animations and effects',
-                  value: settings.animationsEnabled,
+                  value: state.animationsEnabled,
                   onChanged: (value) => settings.toggleAnimations(),
                 ),
                 
@@ -77,7 +79,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 
                 // Language Section
                 _buildSectionHeader('Language'),
-                _buildLanguageCard(settings),
+                _buildLanguageCard(settings, state),
                 
                 const SizedBox(height: 24),
                 
@@ -93,7 +95,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 
                 // Statistics Section
                 _buildSectionHeader('Statistics'),
-                _buildStatsCard(settings),
+                _buildStatsCard(state),
                 
                 const SizedBox(height: 24),
                 
@@ -226,7 +228,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
   */
 
-  Widget _buildLanguageCard(SettingsProvider settings) {
+  Widget _buildLanguageCard(SettingsCubit settings, SettingsState state) {
     return CommonCard(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -248,11 +250,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 12),
           ...AppConfig.supportedLocales.map((locale) {
-            final isSelected = settings.currentLocale.languageCode == locale.languageCode;
+            final isSelected = state.currentLocale.languageCode == locale.languageCode;
             return ListTile(
               leading: Radio<String>(
                 value: locale.languageCode,
-                groupValue: settings.currentLocale.languageCode,
+                groupValue: state.currentLocale.languageCode,
                 onChanged: (value) {
                   if (value != null) {
                     settings.changeLanguage(Locale(value, ''));
@@ -278,18 +280,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildStatsCard(SettingsProvider settings) {
+  Widget _buildStatsCard(SettingsState state) {
     return CommonCard(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          _buildStatRow('High Score', '${settings.highScore}', Icons.emoji_events),
+          _buildStatRow('High Score', '${state.highScore}', Icons.emoji_events),
           const Divider(height: 24),
-          _buildStatRow('Total Coins', '${settings.coins}', Icons.monetization_on),
+          _buildStatRow('Total Coins', '${state.coins}', Icons.monetization_on),
           const Divider(height: 24),
-          _buildStatRow('Story Progress', 'Level ${settings.currentStoryLevel}', Icons.book),
+          _buildStatRow('Story Progress', 'Level ${state.currentStoryLevel}', Icons.book),
           const Divider(height: 24),
-          _buildStatRow('Themes Unlocked', '${settings.unlockedThemeIds.length}', Icons.palette),
+          _buildStatRow('Themes Unlocked', '${state.unlockedThemeIds.length}', Icons.palette),
         ],
       ),
     );
@@ -321,7 +323,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildDataCard(SettingsProvider settings) {
+  Widget _buildDataCard(SettingsCubit settings) {
     return CommonCard(
       child: Column(
         children: [
@@ -460,7 +462,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
   */
 
-  void _syncData(SettingsProvider settings) async {
+  void _syncData(SettingsCubit settings) async {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Syncing data...')),
     );
@@ -473,7 +475,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _showClearDataDialog(SettingsProvider settings) {
+  void _showClearDataDialog(SettingsCubit settings) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(

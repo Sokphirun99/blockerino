@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:vibration/vibration.dart';
 import '../config/app_config.dart';
-import '../providers/game_state_provider.dart';
-import '../providers/settings_provider.dart';
+import '../cubits/game/game_cubit.dart';
+import '../cubits/game/game_state.dart';
+import '../cubits/settings/settings_cubit.dart';
+import '../cubits/settings/settings_state.dart';
 import '../models/board.dart';
 import '../models/game_mode.dart';
 import '../models/story_level.dart';
@@ -16,6 +18,7 @@ import '../widgets/draggable_piece_widget.dart';
 import '../widgets/particle_effect_widget.dart';
 import '../widgets/animated_background_widget.dart';
 import '../widgets/screen_shake_widget.dart';
+import '../widgets/shared_ui_components.dart';
 
 // Safe vibration helper for web compatibility
 void _safeVibrate({int duration = 50, int amplitude = 128}) {
@@ -58,29 +61,29 @@ class _GameScreenState extends State<GameScreen> {
     if (!_initialized) {
       _initialized = true;
       try {
-        final gameState = Provider.of<GameStateProvider>(context, listen: false);
-        final settings = Provider.of<SettingsProvider>(context, listen: false);
+        final gameCubit = context.read<GameCubit>();
+        final settingsCubit = context.read<SettingsCubit>();
         
-        // If board is null, start game with appropriate mode
-        if (gameState.board == null) {
+        // If no active game, start game with appropriate mode
+        if (!gameCubit.hasActiveGame) {
           // Schedule game start after the current frame to avoid setState during build
           WidgetsBinding.instance.addPostFrameCallback((_) {
             // Use story level's game mode if provided, otherwise classic
             final mode = widget.storyLevel?.gameMode ?? GameMode.classic;
-            gameState.startGame(mode);
+            gameCubit.startGame(mode);
             
             // Track game start
-            settings.analyticsService.logGameStart(mode.name);
+            settingsCubit.analyticsService.logGameStart(mode.name);
             if (widget.storyLevel != null) {
-              settings.analyticsService.logScreenView('game_story_level_${widget.storyLevel!.levelNumber}');
+              settingsCubit.analyticsService.logScreenView('game_story_level_${widget.storyLevel!.levelNumber}');
             } else {
-              settings.analyticsService.logScreenView('game_${mode.name}');
+              settingsCubit.analyticsService.logScreenView('game_${mode.name}');
             }
           });
         }
         
         // Set up line clear callback
-        gameState.onLinesCleared = _onLinesCleared;
+        gameCubit.onLinesCleared = _onLinesCleared;
       } catch (e) {
         debugPrint('Error initializing game: $e');
       }
@@ -91,9 +94,10 @@ class _GameScreenState extends State<GameScreen> {
     final boardBox = _boardKey.currentContext?.findRenderObject() as RenderBox?;
     if (boardBox == null) return;
 
-    final gameState = Provider.of<GameStateProvider>(context, listen: false);
+    final gameCubit = context.read<GameCubit>();
+    final gameState = gameCubit.state;
+    if (gameState is! GameInProgress) return;
     final board = gameState.board;
-    if (board == null) return;
 
     // Calculate block size
     final boardSize = boardBox.size;
@@ -172,12 +176,22 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Animated background
-          const Positioned.fill(
-            child: AnimatedBackgroundWidget(),
+    final gameCubit = context.read<GameCubit>();
+    
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          // Save game when back button is pressed
+          gameCubit.saveGame();
+        }
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            // Animated background
+            const Positioned.fill(
+              child: AnimatedBackgroundWidget(),
           ),
           
           // Main game content with screen shake
@@ -202,11 +216,11 @@ class _GameScreenState extends State<GameScreen> {
               ),
             ),
             child: SafeArea(
-              child: Consumer<GameStateProvider>(
-                builder: (context, gameState, child) {
-                  if (gameState.gameOver) {
+              child: BlocBuilder<GameCubit, GameState>(
+                builder: (context, state) {
+                  if (state is GameOver) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      _showGameOverDialog(context, gameState);
+                      _showGameOverDialog(context, context.read<GameCubit>());
                     });
                   }
                   
@@ -220,20 +234,23 @@ class _GameScreenState extends State<GameScreen> {
                           children: [
                             IconButton(
                               icon: Icon(Icons.arrow_back, color: AppConfig.textPrimary),
-                              onPressed: () => Navigator.pop(context),
+                              onPressed: () {
+                                // Save game before going back
+                                context.read<GameCubit>().saveGame();
+                                Navigator.pop(context);
+                              },
                             ),
                             const GameHudWidget(),
                           ],
                         ),
                       ),
                       
-                      const SizedBox(height: 4),
-                      
                       // Game Board with DragTarget - wrapped in Expanded to constrain size
                       Expanded(
+                        flex: 3,
                         child: Center(
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                            padding: const EdgeInsets.symmetric(horizontal: 12.0),
                             child: BoardDragTarget(
                               child: KeyedSubtree(
                                 key: _boardKey,
@@ -244,17 +261,16 @@ class _GameScreenState extends State<GameScreen> {
                         ),
                       ),
                       
-                      const SizedBox(height: 8),
-                      
-                      // Hand Pieces
-                      const HandPiecesWidget(),
-                      
-                      const SizedBox(height: 12),
+                      // Hand Pieces - more space like Block Blast
+                      const Expanded(
+                        flex: 1,
+                        child: HandPiecesWidget(),
+                      ),
                       
                       // Power-Up Bar
-                      Consumer<SettingsProvider>(
-                        builder: (context, settings, _) {
-                          return _buildPowerUpBar(context, settings);
+                      BlocBuilder<SettingsCubit, SettingsState>(
+                        builder: (context, settingsState) {
+                          return _buildPowerUpBar(context, context.read<SettingsCubit>());
                         },
                       ),
                       
@@ -336,18 +352,22 @@ class _GameScreenState extends State<GameScreen> {
           )),
         ],
       ),
+      ),
     );
   }
 
-  void _showGameOverDialog(BuildContext context, GameStateProvider gameState) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    final isHighScore = gameState.score >= settings.highScore;
+  void _showGameOverDialog(BuildContext context, GameCubit gameCubit) {
+    final settingsCubit = context.read<SettingsCubit>();
+    final state = gameCubit.state;
+    if (state is! GameOver) return;
+    
+    final isHighScore = state.finalScore >= settingsCubit.state.highScore;
     
     // Track game end analytics
-    final mode = widget.storyLevel?.gameMode ?? gameState.gameMode;
-    settings.analyticsService.logGameEnd(
+    final mode = widget.storyLevel?.gameMode ?? state.gameMode;
+    settingsCubit.analyticsService.logGameEnd(
       gameMode: mode.name,
-      score: gameState.score,
+      score: state.finalScore,
       linesCleared: 0, // We don't track total lines cleared yet
       duration: 0, // We don't track duration yet, could add timer
     );
@@ -359,7 +379,7 @@ class _GameScreenState extends State<GameScreen> {
     
     if (isStoryMode) {
       final level = widget.storyLevel!;
-      final score = gameState.score;
+      final score = state.finalScore;
       
       // Check if level objectives are met
       levelCompleted = score >= level.targetScore;
@@ -375,11 +395,11 @@ class _GameScreenState extends State<GameScreen> {
       
       // Update progress if level completed
       if (levelCompleted) {
-        settings.completeStoryLevel(level.levelNumber, starsEarned, level.coinReward);
+        settingsCubit.completeStoryLevel(level.levelNumber, starsEarned, level.coinReward);
       }
     }
     
-    if (settings.hapticsEnabled) {
+    if (settingsCubit.state.hapticsEnabled) {
       _safeVibrate(duration: 500);
     }
     
@@ -469,7 +489,7 @@ class _GameScreenState extends State<GameScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              '${gameState.score}',
+              '${state.finalScore}',
               style: Theme.of(context).textTheme.displayLarge?.copyWith(
                     color: Colors.white,
                     fontSize: 56,
@@ -488,7 +508,7 @@ class _GameScreenState extends State<GameScreen> {
                   const Icon(Icons.star, color: Color(0xFFFFE66D), size: 18),
                   const SizedBox(width: 8),
                   Text(
-                    'Best: ${settings.highScore}',
+                    'Best: ${settingsCubit.state.highScore}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Colors.white70,
                           fontSize: 14,
@@ -517,7 +537,7 @@ class _GameScreenState extends State<GameScreen> {
                 final nextLevel = StoryLevel.allLevels.firstWhere(
                   (level) => level.levelNumber == widget.storyLevel!.levelNumber + 1,
                 );
-                gameState.resetGame();
+                gameCubit.resetGame();
                 Navigator.pop(dialogContext); // Close dialog
                 Navigator.pushReplacement(
                   context,
@@ -539,7 +559,7 @@ class _GameScreenState extends State<GameScreen> {
           else
             ElevatedButton(
               onPressed: () {
-                gameState.resetGame();
+                gameCubit.resetGame();
                 Navigator.pop(dialogContext);
               },
               style: ElevatedButton.styleFrom(
@@ -559,39 +579,33 @@ class _GameScreenState extends State<GameScreen> {
 
   // ========== Power-Up UI Methods ==========
 
-  Widget _buildPowerUpBar(BuildContext context, SettingsProvider settings) {
+  Widget _buildPowerUpBar(BuildContext context, SettingsCubit settingsCubit) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildPowerUpButton(context, PowerUpType.shuffle, settings),
-          _buildPowerUpButton(context, PowerUpType.wildPiece, settings),
-          _buildPowerUpButton(context, PowerUpType.lineClear, settings),
-          _buildPowerUpButton(context, PowerUpType.colorBomb, settings),
+          _buildPowerUpButton(context, PowerUpType.shuffle, settingsCubit),
+          _buildPowerUpButton(context, PowerUpType.wildPiece, settingsCubit),
+          _buildPowerUpButton(context, PowerUpType.lineClear, settingsCubit),
+          _buildPowerUpButton(context, PowerUpType.colorBomb, settingsCubit),
         ],
       ),
     );
   }
 
-  Widget _buildPowerUpButton(BuildContext context, PowerUpType type, SettingsProvider settings) {
-    final count = settings.getPowerUpCount(type);
+  Widget _buildPowerUpButton(BuildContext context, PowerUpType type, SettingsCubit settingsCubit) {
+    final count = settingsCubit.getPowerUpCount(type);
     final powerUp = PowerUp.allPowerUps.firstWhere((p) => p.type == type);
     
     return GestureDetector(
       onTap: count > 0 ? () async {
-        final gameState = Provider.of<GameStateProvider>(context, listen: false);
-        await gameState.triggerPowerUp(type);
+        final gameCubit = context.read<GameCubit>();
+        await gameCubit.triggerPowerUp(type);
         
         // Show feedback
         if (mounted && count - 1 == 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${powerUp.name} used! Buy more in the Store.'),
-              duration: const Duration(seconds: 2),
-              backgroundColor: Colors.orange,
-            ),
-          );
+          SharedSnackBars.showPowerUpUsed(context, powerUp.name);
         }
       } : null,
       child: Opacity(

@@ -57,6 +57,7 @@ class BoardBlock {
 class Board {
   final int size;
   late List<List<BoardBlock>> grid;
+  late BigInt _bitboard; // Bitboard for O(1) collision detection
 
   Board({required this.size}) {
     grid = List.generate(
@@ -66,26 +67,44 @@ class Board {
         (j) => BoardBlock(type: BlockType.empty),
       ),
     );
+    _updateBitboard();
   }
 
-  Board.fromGrid(this.size, this.grid);
+  Board.fromGrid(this.size, this.grid) {
+    _updateBitboard();
+  }
 
-  bool canPlacePiece(Piece piece, int x, int y) {
-    if (x < 0 || y < 0) return false;
-    if (x + piece.width > size || y + piece.height > size) return false;
-
-    for (int row = 0; row < piece.height; row++) {
-      for (int col = 0; col < piece.width; col++) {
-        if (piece.shape[row][col]) {
-          final boardX = x + col;
-          final boardY = y + row;
-          if (grid[boardY][boardX].type == BlockType.filled) {
-            return false;
-          }
+  /// Updates the bitboard representation of the grid
+  void _updateBitboard() {
+    _bitboard = BigInt.zero;
+    for (int row = 0; row < size; row++) {
+      for (int col = 0; col < size; col++) {
+        if (grid[row][col].type == BlockType.filled || 
+            grid[row][col].type == BlockType.hoverBreakFilled) {
+          _bitboard |= BigInt.one << (row * size + col);
         }
       }
     }
-    return true;
+  }
+
+  bool canPlacePiece(Piece piece, int x, int y) {
+    // 1. Boundary Checks (O(1))
+    if (x < 0 || y < 0) return false;
+    if (x + piece.width > size || y + piece.height > size) return false;
+
+    // 2. Bitwise Collision Check (O(1) effectively)
+    // Construct piece mask shifted to (x, y)
+    BigInt pieceMask = BigInt.zero;
+    for (int r = 0; r < piece.height; r++) {
+      for (int c = 0; c < piece.width; c++) {
+        if (piece.shape[r][c]) {
+          pieceMask |= BigInt.one << ((y + r) * size + (x + c));
+        }
+      }
+    }
+
+    // Check intersection
+    return (_bitboard & pieceMask) == BigInt.zero;
   }
 
   void placePiece(Piece piece, int x, int y, {BlockType type = BlockType.filled}) {
@@ -100,6 +119,10 @@ class Board {
           );
         }
       }
+    }
+    // Update bitboard after placement
+    if (type == BlockType.filled) {
+      _updateBitboard();
     }
   }
 
@@ -285,6 +308,10 @@ class Board {
       }
     }
 
+    if (rowsToClear.isNotEmpty || colsToClear.isNotEmpty) {
+      _updateBitboard();
+    }
+
     return LineClearResult(
       lineCount: rowsToClear.length + colsToClear.length,
       clearedBlocks: clearedBlocks,
@@ -306,16 +333,128 @@ class Board {
     return Board.fromGrid(size, newGrid);
   }
 
+  /// Optimized deadlock detection (Section 4.4 of technical document)
+  /// Uses early exit and space mapping for O(k*N^2) -> O(k*N) average case
   bool hasAnyValidMove(List<Piece> hand) {
+    // Early exit: Calculate largest contiguous empty region
+    final maxEmptyRegion = _getLargestEmptyRegion();
+    final minPieceSize = hand.map((p) => p.getBlockCount()).reduce((a, b) => a < b ? a : b);
+    
+    // Fail-fast: If largest empty space < smallest piece, game over
+    if (maxEmptyRegion < minPieceSize) {
+      return false;
+    }
+    
+    // Check each piece against all positions
     for (var piece in hand) {
       for (int row = 0; row < size; row++) {
         for (int col = 0; col < size; col++) {
           if (canPlacePiece(piece, col, row)) {
-            return true;
+            return true; // Early exit on first valid move
           }
         }
       }
     }
     return false;
+  }
+  
+  /// Calculate largest contiguous empty region for optimization
+  int _getLargestEmptyRegion() {
+    int maxRegion = 0;
+    final visited = List.generate(size, (_) => List.filled(size, false));
+    
+    for (int row = 0; row < size; row++) {
+      for (int col = 0; col < size; col++) {
+        if (grid[row][col].type == BlockType.empty && !visited[row][col]) {
+          final regionSize = _floodFillCount(row, col, visited);
+          if (regionSize > maxRegion) maxRegion = regionSize;
+        }
+      }
+    }
+    return maxRegion;
+  }
+  
+  /// Flood fill to count contiguous empty cells
+  int _floodFillCount(int row, int col, List<List<bool>> visited) {
+    if (row < 0 || row >= size || col < 0 || col >= size) return 0;
+    if (visited[row][col] || grid[row][col].type != BlockType.empty) return 0;
+    
+    visited[row][col] = true;
+    int count = 1;
+    
+    // Check 4 neighbors (non-recursive for stack safety)
+    final queue = <List<int>>[[row, col]];
+    int queueIndex = 0;
+    
+    while (queueIndex < queue.length) {
+      final current = queue[queueIndex++];
+      final r = current[0];
+      final c = current[1];
+      
+      final neighbors = [
+        [r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]
+      ];
+      
+      for (final neighbor in neighbors) {
+        final nr = neighbor[0];
+        final nc = neighbor[1];
+        if (nr >= 0 && nr < size && nc >= 0 && nc < size &&
+            !visited[nr][nc] && grid[nr][nc].type == BlockType.empty) {
+          visited[nr][nc] = true;
+          count++;
+          queue.add([nr, nc]);
+        }
+      }
+    }
+    
+    return count;
+  }
+  
+  /// Get board density (percentage of filled cells) for adaptive piece generation
+  double getDensity() {
+    int filledCount = 0;
+    for (int row = 0; row < size; row++) {
+      for (int col = 0; col < size; col++) {
+        if (grid[row][col].type == BlockType.filled) filledCount++;
+      }
+    }
+    return filledCount / (size * size);
+  }
+
+  // Serialization methods
+  Map<String, dynamic> toJson() {
+    return {
+      'size': size,
+      'grid': grid.map((row) => 
+        row.map((block) => {
+          'type': block.type.index,
+          'color': block.color?.toARGB32(),
+        }).toList()
+      ).toList(),
+    };
+  }
+
+  factory Board.fromJson(Map<String, dynamic> json) {
+    final size = json['size'] as int;
+    final gridData = json['grid'] as List;
+    
+    final grid = List.generate(
+      size,
+      (row) => List.generate(
+        size,
+        (col) {
+          final blockData = gridData[row][col] as Map<String, dynamic>;
+          final typeIndex = blockData['type'] as int;
+          final colorValue = blockData['color'] as int?;
+          
+          return BoardBlock(
+            type: BlockType.values[typeIndex],
+            color: colorValue != null ? Color(colorValue) : null,
+          );
+        },
+      ),
+    );
+    
+    return Board.fromGrid(size, grid);
   }
 }
