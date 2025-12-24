@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -9,7 +9,6 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:logger/logger.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:device_preview/device_preview.dart';
 import 'firebase_options.dart';
 import 'screens/main_menu_screen.dart';
 import 'cubits/game/game_cubit.dart';
@@ -63,16 +62,52 @@ void main() async {
     _logger.e('SoundService initialization failed', error: e);
   });
 
+  // CRITICAL FIX: Initialize SettingsCubit before running app to ensure state is ready
+  // This prevents GameCubit from accessing uninitialized settings
+  //
+  // BUG FIX: Previously used `onTimeout` callback which returns void and doesn't throw,
+  // causing the code to continue as if initialization completed even when it timed out.
+  // Now we properly catch TimeoutException to detect when initialization didn't complete.
+  final settingsCubit = SettingsCubit();
+
+  try {
+    // Wait for initialization to complete (with timeout)
+    // If timeout occurs, TimeoutException is thrown (not silently swallowed)
+    await settingsCubit.initialize().timeout(
+          const Duration(seconds: 5),
+        );
+    _logger.i('SettingsCubit initialization completed successfully');
+  } on TimeoutException catch (e) {
+    // CRITICAL: Timeout occurred - initialization didn't complete
+    // This means settingsCubit.state still has default values from SettingsState.initial()
+    // GameCubit constructor will read these defaults, which is safe but not ideal
+    // Initialization may complete later in background, but state won't sync to GameCubit
+    _logger.w(
+        'SettingsCubit initialization timed out after 5 seconds - GameCubit will use default settings',
+        error: e);
+  } catch (e) {
+    // Other initialization errors (network, permissions, etc.)
+    _logger.e(
+        'SettingsCubit initialization failed - GameCubit will use default settings',
+        error: e);
+    // Continue with defaults - SettingsState.initial() provides safe defaults
+  }
+
+  // Note: If initialization timed out or failed, GameCubit will use default sound/haptics settings
+  // from SettingsState.initial(). This is safe but may not match user's saved preferences.
+  // Settings will be correct once initialization completes and user navigates away and back.
+
+  // CRITICAL: settingsCubit is now initialized - pass it to app
+  // It will NOT be initialized again in BlockerinoApp to avoid double initialization
   runApp(
-    DevicePreview(
-      enabled: kDebugMode, // Only enable in debug mode
-      builder: (context) => const BlockerinoApp(),
-    ),
+    BlockerinoApp(preInitializedSettingsCubit: settingsCubit),
   );
 }
 
 class BlockerinoApp extends StatelessWidget {
-  const BlockerinoApp({super.key});
+  final SettingsCubit? preInitializedSettingsCubit;
+
+  const BlockerinoApp({super.key, this.preInitializedSettingsCubit});
 
   @override
   Widget build(BuildContext context) {
@@ -84,9 +119,23 @@ class BlockerinoApp extends StatelessWidget {
 
     return MultiBlocProvider(
       providers: [
-        BlocProvider(
-          create: (_) =>
-              SettingsCubit()..initialize(), // Initialize settings on creation
+        BlocProvider.value(
+          // CRITICAL FIX: preInitializedSettingsCubit is always provided from main()
+          // and has already been initialized and awaited. We use it directly without
+          // calling initialize() again to avoid concurrent initialization, race conditions,
+          // and duplicate state emissions.
+          //
+          // Original bug: The cascade operator `..initialize()` in the fallback expression
+          // could theoretically execute if preInitializedSettingsCubit is null, but more
+          // importantly, it's confusing and could lead to double initialization if the
+          // logic changes. This explicit check ensures we never call initialize() on an
+          // already-initialized cubit.
+          value: preInitializedSettingsCubit ??
+              // Defensive fallback (should never execute in normal flow)
+              // CRITICAL FIX: Do not call initialize() here - we cannot await in this synchronous context.
+              // If this fallback executes, the cubit will use default values from SettingsState.initial().
+              // This is acceptable for a defensive fallback that should never execute.
+              SettingsCubit(),
         ),
         BlocProvider(
           create: (context) => GameCubit(
@@ -103,35 +152,30 @@ class BlockerinoApp extends StatelessWidget {
             minTextAdapt: true,
             splitScreenMode: true,
             builder: (context, child) {
-              return DevicePreview.appBuilder(
-                context,
-                MaterialApp(
-                  title: 'Blockerino',
-                  debugShowCheckedModeBanner: false,
-                  navigatorObservers: observer != null ? [observer] : [],
+              return MaterialApp(
+                title: 'Blockerino',
+                debugShowCheckedModeBanner: false,
+                navigatorObservers: observer != null ? [observer] : [],
 
-                  // Localization support
-                  // Use DevicePreview's locale in debug mode, otherwise use settings
-                  locale: DevicePreview.locale(context) ??
-                      settingsState.currentLocale,
-                  supportedLocales: AppConfig.supportedLocales,
-                  localizationsDelegates: const [
-                    AppLocalizations.delegate,
-                    GlobalMaterialLocalizations.delegate,
-                    GlobalWidgetsLocalizations.delegate,
-                    GlobalCupertinoLocalizations.delegate,
-                  ],
+                // Localization support
+                locale: settingsState.currentLocale,
+                supportedLocales: AppConfig.supportedLocales,
+                localizationsDelegates: const [
+                  AppLocalizations.delegate,
+                  GlobalMaterialLocalizations.delegate,
+                  GlobalWidgetsLocalizations.delegate,
+                  GlobalCupertinoLocalizations.delegate,
+                ],
 
-                  theme: ThemeData(
-                    brightness: Brightness.dark,
-                    scaffoldBackgroundColor: Colors.black,
-                    primarySwatch: Colors.blue,
-                    textTheme: GoogleFonts.pressStart2pTextTheme(
-                      ThemeData.dark().textTheme,
-                    ),
+                theme: ThemeData(
+                  brightness: Brightness.dark,
+                  scaffoldBackgroundColor: Colors.black,
+                  primarySwatch: Colors.blue,
+                  textTheme: GoogleFonts.pressStart2pTextTheme(
+                    ThemeData.dark().textTheme,
                   ),
-                  home: const MainMenuScreen(),
                 ),
+                home: const MainMenuScreen(),
               );
             },
           );

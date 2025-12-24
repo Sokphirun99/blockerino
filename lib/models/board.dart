@@ -130,27 +130,16 @@ class Board {
   }
 
   bool canPlacePiece(Piece piece, int x, int y) {
-    // #region agent log - Track validation steps
-    final pieceId = piece.id;
     // NOTE: Bitboard sync check removed from here for performance
     // It was running on every canPlacePiece call (hundreds of times per frame)
     // If bitboard sync issues occur, they should be fixed at the source (placePiece, power-ups, etc.)
-    // #endregion
 
     // 1. Boundary Checks (O(1)) - More forgiving for easier placement
     // Allow slight edge cases (within 1 pixel tolerance)
     if (x < -1 || y < -1) {
-      // #region agent log - Boundary check failed (negative)
-      debugPrint(
-          '[DEBUG:BOARD] canPlacePiece: piece=$pieceId at ($x, $y) REJECTED - negative coordinates');
-      // #endregion
       return false;
     }
     if (x + piece.width > size + 1 || y + piece.height > size + 1) {
-      // #region agent log - Boundary check failed (out of bounds)
-      debugPrint(
-          '[DEBUG:BOARD] canPlacePiece: piece=$pieceId at ($x, $y) REJECTED - out of bounds (size=$size, piece=${piece.width}x${piece.height})');
-      // #endregion
       return false;
     }
 
@@ -161,10 +150,6 @@ class Board {
     // If clamping changed the position significantly (>1 cell), reject
     // This allows for slight rounding errors but prevents major misalignment
     if ((clampedX - x).abs() > 1 || (clampedY - y).abs() > 1) {
-      // #region agent log - Clamping rejection
-      debugPrint(
-          '[DEBUG:BOARD] canPlacePiece: piece=$pieceId at ($x, $y) REJECTED - clamping changed position too much (clamped to $clampedX, $clampedY)');
-      // #endregion
       return false;
     }
 
@@ -186,17 +171,9 @@ class Board {
     // Check intersection
     final hasCollision = (_bitboard & pieceMask) != BigInt.zero;
     if (hasCollision) {
-      // #region agent log - Collision detected
-      debugPrint(
-          '[DEBUG:BOARD] canPlacePiece: piece=$pieceId at ($x, $y) REJECTED - collision detected (checkX=$checkX, checkY=$checkY)');
-      // #endregion
       return false;
     }
 
-    // #region agent log - Placement valid
-    debugPrint(
-        '[DEBUG:BOARD] canPlacePiece: piece=$pieceId at ($x, $y) ACCEPTED (checkX=$checkX, checkY=$checkY)');
-    // #endregion
     return true;
   }
 

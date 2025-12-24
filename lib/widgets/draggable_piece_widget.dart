@@ -19,9 +19,6 @@ void _dragDebugLog(
 }
 // #endregion
 
-// FORCE REBUILD: This constant will cause compilation error if old code runs
-const String _v6ForceRebuildConstant = 'v6.0_DRAG_OFFSET_FIX_APPLIED';
-
 // Intelligent haptics helper
 Future<void> _intelligentHaptic(HapticFeedbackType type) async {
   if (kIsWeb) return; // Haptics not supported on web
@@ -296,105 +293,62 @@ class _BoardDragTargetState extends State<BoardDragTarget> {
 
   /// Centralized "Finger-to-Grid" calculation
   /// Returns (gridX, gridY) or null if calculation fails or coordinates are invalid
-  ///
-  /// FIXED: Uses GlobalKey to get exact grid widget bounds instead of hardcoded padding values
-  /// This makes the coordinate calculation resilient to layout changes
   ({int gridX, int gridY})? _calculateGridPosition(
     BuildContext context,
     Offset globalOffset,
     Piece piece,
   ) {
-    // CRITICAL: This print MUST appear if new code is running
-    // Using _v6ForceRebuildConstant will cause compile error if old code runs
-    debugPrint(
-        '=== NEW CODE v6.0 RUNNING === $_v6ForceRebuildConstant === adjustedY -= dragYOffset fix applied');
     final gameCubit = context.read<GameCubit>();
     final currentState = gameCubit.state;
     if (currentState is! GameInProgress) return null;
 
-    // CRITICAL FIX: Use the grid widget's RenderBox directly if available
-    // This eliminates dependency on hardcoded padding values
+    // 1. Get the Grid RenderBox
     RenderBox? gridRenderBox;
     if (widget.gridKey?.currentContext != null) {
       gridRenderBox =
           widget.gridKey!.currentContext!.findRenderObject() as RenderBox?;
     }
 
-    // Fallback to DragTarget's RenderBox if grid key not available
+    // Fallback to DragTarget's RenderBox (less accurate)
     final fallbackRenderBox = context.findRenderObject() as RenderBox?;
     final renderBox = gridRenderBox ?? fallbackRenderBox;
 
     if (renderBox == null) return null;
 
-    // Get position relative to the grid widget (or DragTarget as fallback)
+    // 2. Convert Global Drop Coordinate to Local Grid Coordinate
+    // globalOffset (details.offset) is the Top-Left corner of the piece visual
     final localPosition = renderBox.globalToLocal(globalOffset);
+
     final board = currentState.board;
     final blockSize = AppConfig.getBlockSize(context, board.size);
 
-    // If using grid widget directly, coordinates are already relative to grid
-    // If using fallback, we still need to account for padding (but this is less ideal)
     double adjustedX = localPosition.dx;
     double adjustedY = localPosition.dy;
 
+    // 3. Fallback padding correction
+    // Only applied if we couldn't get the inner grid widget directly
     if (gridRenderBox == null) {
-      // Fallback: Only subtract padding if we couldn't get grid widget directly
-      // This maintains backward compatibility but is less accurate
-      adjustedX = localPosition.dx -
-          AppConfig.boardContainerPadding -
-          AppConfig.boardBorderWidth;
-      adjustedY = localPosition.dy -
-          AppConfig.boardContainerPadding -
-          AppConfig.boardBorderWidth;
+      adjustedX -= AppConfig.boardContainerPadding;
+      adjustedY -= AppConfig.boardContainerPadding;
     }
 
-    // ============================================================================
-    // CRITICAL FIX v5.0 - APPLY OFFSET IN OPPOSITE DIRECTION
-    // ============================================================================
-    // Problem: Pieces land above finger's perceived drop location
-    // Analysis: Visual piece appears above finger (feedbackAnchor moves it up)
-    //   Old code: adjustedY = localY + dragYOffset = localY - 60 (moves target UP)
-    //   This makes pieces land too high
-    // Solution: Apply offset in opposite direction to match visual piece position
-    //   New code: adjustedY = localY - dragYOffset = localY - (-60) = localY + 60
-    //   This moves target DOWN to match where visual piece center appears
-    // ============================================================================
-    final dragYOffset = _getDragYOffset(context);
-    final adjustedYBefore = adjustedY;
-    // FIX: Subtract negative offset = Add, moves target DOWN to match visual
-    adjustedY -= dragYOffset; // localY - (-60) = localY + 60
+    // 4. CRITICAL FIX: Removed the extra offsets
+    // Previous code subtracted (width/2) and (height/2) here.
+    // That is NOT needed because 'adjustedX/Y' is already the Top-Left
+    // of the piece (because globalOffset is the Top-Left of the feedback).
 
-    // The finger/anchor is at the CENTER of the piece
-    final pieceWidthInPixels = piece.width * blockSize;
-    final pieceHeightInPixels = piece.height * blockSize;
+    // Previous code also modified adjustedY based on dragYOffset.
+    // That is also NOT needed because the user aligns the *visual* piece
+    // with the grid. If the visual matches the grid, the coordinates match.
 
-    final topLeftX = adjustedX - (pieceWidthInPixels / 2);
-    final topLeftY = adjustedY - (pieceHeightInPixels / 2);
+    // 5. Calculate Grid Coordinates
+    // Using round() instead of floor() provides a better "magnetic" snap feel
+    // when the piece is slightly off-center.
+    final gridX = (adjustedX / blockSize).round();
+    final gridY = (adjustedY / blockSize).round();
 
-    // Convert to grid coordinates
-    // Use floor() instead of round() for more predictable placement
-    // This makes it easier to place pieces - they snap to grid cells more reliably
-    final gridX = (topLeftX / blockSize).floor();
-    final gridY = (topLeftY / blockSize).floor();
-
-    // #region agent log - NEW CODE v6.0 - OFFSET IN OPPOSITE DIRECTION
-    _dragDebugLog('_calculateGridPosition.FIXED_v6', 'H6', {
-      'localY': localPosition.dy,
-      'dragYOffset': dragYOffset,
-      'adjustedY_before': adjustedYBefore,
-      'adjustedY_after': adjustedY,
-      'calculation': 'adjustedY -= dragYOffset (opposite direction)',
-      'math': 'localY - (-60) = localY + 60 (moves DOWN to match visual)',
-      'gridX': gridX,
-      'gridY': gridY,
-      'CODE_VERSION': 'v6.0_OPPOSITE_OFFSET',
-      'FORCE_REBUILD_CONSTANT': _v6ForceRebuildConstant,
-      'NOTE': 'adjustedY_after should be adjustedY_before + 60',
-    });
-    // #endregion
-
-    // CRITICAL: Validate coordinates are within bounds before returning
-    // Allow slight negative values (will be clamped in canPlacePiece)
-    // This makes placement more forgiving near edges
+    // 6. Validate Bounds
+    // Allow -1 for lenient edge detection (clamped later by logic)
     if (gridX < -1 || gridY < -1) return null;
     if (gridX + piece.width > board.size + 1 ||
         gridY + piece.height > board.size + 1) {
@@ -501,43 +455,24 @@ class _BoardDragTargetState extends State<BoardDragTarget> {
 
         // Only update if position changed (prevents unnecessary rebuilds)
         if (gridX != _lastGridX || gridY != _lastGridY) {
+          // OPTIMIZATION: Removed redundant canPlacePiece check here
+          // showHoverPreview already validates the position internally
+          // This eliminates duplicate expensive collision detection calls
+          gameCubit.showHoverPreview(piece, gridX, gridY);
+          
+          // Haptic feedback when entering a new valid spot
           final currentState = gameCubit.state;
           if (currentState is GameInProgress) {
-            // CRITICAL FIX: Validate position is still valid with current board state
-            final isValid =
-                currentState.board.canPlacePiece(piece, gridX, gridY);
-
-            // #region agent log
-            _dragDebugLog('onMove.positionChanged', 'MOVE', {
-              'gridX': gridX,
-              'gridY': gridY,
-              'lastGridX': _lastGridX,
-              'lastGridY': _lastGridY,
-              'isValid': isValid,
-              'pieceId': piece.id,
-            });
-            // #endregion
-
-            // Only show hover preview if position is valid
-            if (isValid) {
-              gameCubit.showHoverPreview(piece, gridX, gridY);
-            } else {
-              gameCubit.clearHoverBlocks();
-            }
-
-            // Haptic feedback when hovering over valid spot
             final settings = context.read<SettingsCubit>().state;
-            if (settings.hapticsEnabled &&
-                isValid &&
-                (_lastGridX == -1 ||
-                    _lastGridY == -1 ||
-                    !currentState.board
-                        .canPlacePiece(piece, _lastGridX, _lastGridY))) {
+            if (settings.hapticsEnabled && 
+                currentState.hoverValid == true &&
+                (_lastGridX == -1 || _lastGridY == -1)) {
+              // Only vibrate when entering a new valid spot for the first time
               _intelligentHaptic(HapticFeedbackType.hoverValid);
             }
           }
-
-          // Cache position (but don't use as fallback in onAccept)
+          
+          // Track last position for change detection
           _lastGridX = gridX;
           _lastGridY = gridY;
         }

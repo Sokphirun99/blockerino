@@ -69,7 +69,10 @@ class BoardGridWidget extends StatelessWidget {
                 // BoardDragTarget (in game_screen.dart) handles all drag & drop logic
                 // Having DragTargets at both cell and board level caused double placement attempts
                 CustomPaint(
-                  painter: GridLinesPainter(boardSize: board.size),
+                  painter: GridLinesPainter(
+                    boardSize: board.size,
+                    lineColor: theme.blockColors.first.withValues(alpha: 0.15),
+                  ),
                   child: Column(
                     children: List.generate(board.size, (row) {
                       return Expanded(
@@ -77,7 +80,11 @@ class BoardGridWidget extends StatelessWidget {
                           children: List.generate(board.size, (col) {
                             final block = board.grid[row][col];
                             return Expanded(
-                              child: _BlockCell(block: block),
+                              child: _BlockCell(
+                                block: block,
+                                row: row,
+                                col: col,
+                              ),
                             );
                           }),
                         ),
@@ -85,17 +92,16 @@ class BoardGridWidget extends StatelessWidget {
                     }),
                   ),
                 ),
-                // Ghost piece preview overlay - only show when valid placement
+                // Ghost piece preview overlay - show for both valid and invalid placements
+                // This provides better visual feedback to the player
                 if (state.hoverPiece != null &&
                     state.hoverX != null &&
-                    state.hoverY != null &&
-                    (state.hoverValid ?? false))
+                    state.hoverY != null)
                   GhostPiecePreview(
                     piece: state.hoverPiece,
                     gridX: state.hoverX!,
                     gridY: state.hoverY!,
-                    isValid:
-                        true, // Always true since we check hoverValid above
+                    isValid: state.hoverValid ?? false,
                   ),
               ],
             ),
@@ -106,16 +112,21 @@ class BoardGridWidget extends StatelessWidget {
   }
 }
 
-/// Custom painter for grid lines (like original)
+/// Custom painter for grid lines with theme-aware colors
 class GridLinesPainter extends CustomPainter {
   final int boardSize;
+  final Color lineColor;
 
-  GridLinesPainter({required this.boardSize});
+  GridLinesPainter({
+    required this.boardSize,
+    this.lineColor = const Color.fromRGBO(255, 255, 255, 0.15),
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.08)
+    // Use theme-aware grid line color for better visual cohesion
+    final gridPaint = Paint()
+      ..color = lineColor
       ..strokeWidth = 1;
 
     final cellWidth = size.width / boardSize;
@@ -124,25 +135,34 @@ class GridLinesPainter extends CustomPainter {
     // Draw vertical lines
     for (int i = 0; i <= boardSize; i++) {
       final x = i * cellWidth;
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
     }
 
     // Draw horizontal lines
     for (int i = 0; i <= boardSize; i++) {
       final y = i * cellHeight;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant GridLinesPainter oldDelegate) {
+    // CRITICAL FIX: Compare lineColor to detect theme changes
+    // If the theme changes, lineColor will change and the grid lines must repaint
+    return lineColor != oldDelegate.lineColor ||
+        boardSize != oldDelegate.boardSize;
+  }
 }
 
 class _BlockCell extends StatefulWidget {
   final BoardBlock block;
+  final int row;
+  final int col;
 
   const _BlockCell({
     required this.block,
+    required this.row,
+    required this.col,
   });
 
   @override
@@ -256,11 +276,38 @@ class _BlockCellState extends State<_BlockCell>
     final theme = context.watch<SettingsCubit>().state.currentTheme;
 
     if (isEmpty) {
+      // Calculate checkerboard pattern for visual distinction
+      // Alternating cells have slightly different brightness
+      final isAlternate = (widget.row + widget.col) % 2 == 0;
+
       return Container(
         margin: const EdgeInsets.all(1),
         decoration: BoxDecoration(
-          color: theme.emptyBlockColor,
+          // Add subtle gradient to empty cells for visual depth
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              theme.emptyBlockColor,
+              isAlternate
+                  ? theme.emptyBlockColor.withValues(alpha: 0.9)
+                  : theme.emptyBlockColor.withValues(alpha: 0.7),
+            ],
+          ),
           borderRadius: BorderRadius.circular(4),
+          // Add subtle border for definition - use theme color
+          border: Border.all(
+            color: theme.blockColors.first.withValues(alpha: 0.08),
+            width: 0.5,
+          ),
+          // Add subtle shadow for depth
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.15),
+              blurRadius: 1,
+              offset: const Offset(0, 0.5),
+            ),
+          ],
         ),
       );
     }
