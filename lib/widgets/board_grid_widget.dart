@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubits/game/game_cubit.dart';
@@ -7,9 +8,6 @@ import '../models/board.dart';
 import '../config/app_config.dart';
 import 'ghost_piece_preview.dart';
 
-// Debug log function removed - duplicate DragTargets were the issue
-// The _calculateAdjustedCoordinates helper was only used by the removed cell-level DragTargets
-
 class BoardGridWidget extends StatelessWidget {
   final GlobalKey? gridKey;
 
@@ -17,27 +15,30 @@ class BoardGridWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.watch<SettingsCubit>().state.currentTheme;
+
+    // Use BlocBuilder to react to game state changes (mode changes)
     return BlocBuilder<GameCubit, GameState>(
-      builder: (context, state) {
-        if (state is! GameInProgress) {
-          return const Center(
-            child: Text(
-              'Loading board...',
-              style: TextStyle(color: Colors.white),
-            ),
-          );
+      builder: (context, gameState) {
+        // Get the actual board to determine grid size
+        int gridSize = 8; // Default to 8 for initial state
+        if (gameState is GameInProgress) {
+          gridSize = gameState.board.size;
+        } else if (gameState is GameOver) {
+          gridSize = gameState.board.size;
         }
-        final board = state.board;
 
-        // Use shared AppConfig for consistent sizing
-        final boardSize = AppConfig.getSize(context);
+        // Scale container size based on grid size
+        // 8x8 uses base size (320.w), 10x10 uses larger size (400.w = 1.25x) for clear visual difference
+        final baseSize = AppConfig.getSize(context);
+        final containerSize = gridSize == 10 ? baseSize * 1.25 : baseSize;
 
-        // Get theme from settings
-        final theme = context.watch<SettingsCubit>().state.currentTheme;
+        debugPrint(
+            'BoardGridWidget: gridSize=$gridSize, containerSize=$containerSize, baseSize=$baseSize');
 
         return Container(
-          width: boardSize,
-          height: boardSize,
+          width: containerSize,
+          height: containerSize,
           decoration: BoxDecoration(
             color: theme.boardColor,
             borderRadius: BorderRadius.circular(12),
@@ -61,48 +62,16 @@ class BoardGridWidget extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(4.0),
             child: Stack(
-              key:
-                  gridKey, // Key for accurate coordinate conversion (on Stack to include padding)
+              key: gridKey,
               clipBehavior: Clip.none,
               children: [
-                // FIX: Removed duplicate DragTarget widgets from cells
-                // BoardDragTarget (in game_screen.dart) handles all drag & drop logic
-                // Having DragTargets at both cell and board level caused double placement attempts
-                CustomPaint(
-                  painter: GridLinesPainter(
-                    boardSize: board.size,
-                    lineColor: theme.blockColors.first.withValues(alpha: 0.15),
-                  ),
-                  child: Column(
-                    children: List.generate(board.size, (row) {
-                      return Expanded(
-                        child: Row(
-                          children: List.generate(board.size, (col) {
-                            final block = board.grid[row][col];
-                            return Expanded(
-                              child: _BlockCell(
-                                block: block,
-                                row: row,
-                                col: col,
-                              ),
-                            );
-                          }),
-                        ),
-                      );
-                    }),
-                  ),
-                ),
-                // Ghost piece preview overlay - show for both valid and invalid placements
-                // This provides better visual feedback to the player
-                if (state.hoverPiece != null &&
-                    state.hoverX != null &&
-                    state.hoverY != null)
-                  GhostPiecePreview(
-                    piece: state.hoverPiece,
-                    gridX: state.hoverX!,
-                    gridY: state.hoverY!,
-                    isValid: state.hoverValid ?? false,
-                  ),
+                // LAYER 1: The Static Grid (HEAVY)
+                // This ignores hover updates and only rebuilds on piece placement
+                const _StaticBoardLayer(),
+
+                // LAYER 2: The Ghost Piece (LIGHT)
+                // This listens to hover updates and rebuilds frequently
+                const _GhostOverlayLayer(),
               ],
             ),
           ),
@@ -112,7 +81,105 @@ class BoardGridWidget extends StatelessWidget {
   }
 }
 
-/// Custom painter for grid lines with theme-aware colors
+/// This layer ONLY rebuilds when the board structure changes (place/clear)
+/// It ignores hover events completely.
+class _StaticBoardLayer extends StatelessWidget {
+  const _StaticBoardLayer();
+
+  @override
+  Widget build(BuildContext context) {
+    // Select specific data to prevent unnecessary rebuilds
+    return BlocSelector<GameCubit, GameState, Board?>(
+      selector: (state) {
+        if (state is GameInProgress) return state.board;
+        if (state is GameOver) return state.board;
+        return null;
+      },
+      builder: (context, board) {
+        if (board == null) {
+          return const Center(
+              child: Text('Loading...', style: TextStyle(color: Colors.white)));
+        }
+
+        final theme = context.read<SettingsCubit>().state.currentTheme;
+
+        // RepaintBoundary caches the expensive grid as an image
+        return RepaintBoundary(
+          child: Stack(
+            children: [
+              CustomPaint(
+                painter: GridLinesPainter(
+                  boardSize: board.size,
+                  lineColor: theme.blockColors.first.withValues(alpha: 0.15),
+                ),
+                child: Column(
+                  children: List.generate(board.size, (row) {
+                    return Expanded(
+                      child: Row(
+                        children: List.generate(board.size, (col) {
+                          final block = board.grid[row][col];
+                          return Expanded(
+                            // We use a const constructor where possible
+                            child: _BlockCell(
+                              block: block,
+                              row: row,
+                              col: col,
+                            ),
+                          );
+                        }),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// This layer handles the Ghost Piece and rebuilds quickly during drag
+class _GhostOverlayLayer extends StatelessWidget {
+  const _GhostOverlayLayer();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<GameCubit, GameState>(
+      buildWhen: (previous, current) {
+        // Only rebuild if hover properties change
+        if (previous is! GameInProgress || current is! GameInProgress) {
+          return true;
+        }
+        return previous.hoverX != current.hoverX ||
+            previous.hoverY != current.hoverY ||
+            previous.hoverPiece != current.hoverPiece ||
+            previous.hoverValid != current.hoverValid;
+      },
+      builder: (context, state) {
+        if (state is! GameInProgress) return const SizedBox.shrink();
+
+        // Show ghost piece if we have valid coordinates
+        if (state.hoverPiece != null &&
+            state.hoverX != null &&
+            state.hoverY != null) {
+          return GhostPiecePreview(
+            piece: state.hoverPiece,
+            gridX: state.hoverX!,
+            gridY: state.hoverY!,
+            isValid: state.hoverValid ?? false,
+          );
+        }
+        return const SizedBox.shrink();
+      },
+    );
+  }
+}
+
+// ... COPY PASTE THE REST OF YOUR EXISTING CLASSES BELOW ...
+// (GridLinesPainter, _BlockCell, and _BlockCellState from your previous file)
+// They were fine, just needed to be inside the Optimized Structure above.
 class GridLinesPainter extends CustomPainter {
   final int boardSize;
   final Color lineColor;
@@ -124,7 +191,6 @@ class GridLinesPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Use theme-aware grid line color for better visual cohesion
     final gridPaint = Paint()
       ..color = lineColor
       ..strokeWidth = 1;
@@ -132,13 +198,11 @@ class GridLinesPainter extends CustomPainter {
     final cellWidth = size.width / boardSize;
     final cellHeight = size.height / boardSize;
 
-    // Draw vertical lines
     for (int i = 0; i <= boardSize; i++) {
       final x = i * cellWidth;
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
     }
 
-    // Draw horizontal lines
     for (int i = 0; i <= boardSize; i++) {
       final y = i * cellHeight;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
@@ -147,8 +211,6 @@ class GridLinesPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant GridLinesPainter oldDelegate) {
-    // CRITICAL FIX: Compare lineColor to detect theme changes
-    // If the theme changes, lineColor will change and the grid lines must repaint
     return lineColor != oldDelegate.lineColor ||
         boardSize != oldDelegate.boardSize;
   }
@@ -174,7 +236,6 @@ class _BlockCellState extends State<_BlockCell>
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
-  /// Helper method to check if block is in glow state
   bool _isShowingGlow(BlockType blockType) {
     return blockType == BlockType.hoverBreakFilled ||
         blockType == BlockType.hoverBreakEmpty ||
@@ -192,7 +253,6 @@ class _BlockCellState extends State<_BlockCell>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Start animation if block is already in glow state
     if (_isShowingGlow(widget.block.type)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -209,18 +269,15 @@ class _BlockCellState extends State<_BlockCell>
     final isShowingGlow = _isShowingGlow(widget.block.type);
     final wasShowingGlow = _isShowingGlow(oldWidget.block.type);
 
-    // Start continuous pulsing when entering glow state
     if (isShowingGlow && !wasShowingGlow) {
       _pulseController.repeat(reverse: true);
     }
 
-    // Stop pulsing when leaving glow state
     if (!isShowingGlow && wasShowingGlow) {
       _pulseController.stop();
       _pulseController.reset();
     }
 
-    // Trigger single pulse animation when block becomes filled
     if ((widget.block.type == BlockType.filled &&
             oldWidget.block.type != BlockType.filled) ||
         (widget.block.type == BlockType.hoverBreakFilled &&
@@ -250,12 +307,10 @@ class _BlockCellState extends State<_BlockCell>
         cellColor = widget.block.color ?? Colors.blue;
         break;
       case BlockType.hover:
-        // BlockType.hover is deprecated - piece preview is handled by GhostPiecePreview widget
-        // Fall through to empty for safety
         cellColor = widget.block.color ?? Colors.blue;
         break;
       case BlockType.hoverBreakFilled:
-        cellColor = widget.block.color ?? Colors.blue; // Use actual block color
+        cellColor = widget.block.color ?? Colors.blue;
         isBreaking = true;
         break;
       case BlockType.hoverBreakEmpty:
@@ -264,7 +319,7 @@ class _BlockCellState extends State<_BlockCell>
         isBreaking = true;
         break;
       case BlockType.hoverBreak:
-        cellColor = widget.block.color ?? Colors.blue; // Use actual block color
+        cellColor = widget.block.color ?? Colors.blue;
         isBreaking = true;
         break;
       case BlockType.empty:
@@ -272,18 +327,13 @@ class _BlockCellState extends State<_BlockCell>
         isEmpty = true;
     }
 
-    // Get theme for empty block colors
     final theme = context.watch<SettingsCubit>().state.currentTheme;
 
     if (isEmpty) {
-      // Calculate checkerboard pattern for visual distinction
-      // Alternating cells have slightly different brightness
       final isAlternate = (widget.row + widget.col) % 2 == 0;
-
       return Container(
         margin: const EdgeInsets.all(1),
         decoration: BoxDecoration(
-          // Add subtle gradient to empty cells for visual depth
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -295,12 +345,10 @@ class _BlockCellState extends State<_BlockCell>
             ],
           ),
           borderRadius: BorderRadius.circular(4),
-          // Add subtle border for definition - use theme color
           border: Border.all(
             color: theme.blockColors.first.withValues(alpha: 0.08),
             width: 0.5,
           ),
-          // Add subtle shadow for depth
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.15),
@@ -312,31 +360,28 @@ class _BlockCellState extends State<_BlockCell>
       );
     }
 
-    // Wrap with AnimatedBuilder for pulsing effect on matching blocks
     return AnimatedBuilder(
       animation: _pulseAnimation,
       builder: (context, child) {
         final isGlowing = _isShowingGlow(widget.block.type);
         final scale = isGlowing ? _pulseAnimation.value : 1.0;
-        final glowIntensity =
-            isGlowing ? _pulseAnimation.value - 1.0 : 0.0; // 0.0 to 0.15
+        final glowIntensity = isGlowing ? _pulseAnimation.value - 1.0 : 0.0;
 
         return Transform.scale(
           scale: scale,
           child: Container(
             margin: const EdgeInsets.all(1),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(4), // Slightly rounder
+              borderRadius: BorderRadius.circular(4),
               gradient: (widget.block.type == BlockType.filled ||
                       widget.block.type == BlockType.hoverBreakFilled)
                   ? LinearGradient(
-                      // <--- NEW: Gradient Effect (matching piece style)
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        cellColor, // Base color
-                        cellColor.withValues(alpha: 0.8), // Slightly darker
-                        cellColor.withValues(alpha: 0.6), // Shadow
+                        cellColor,
+                        cellColor.withValues(alpha: 0.8),
+                        cellColor.withValues(alpha: 0.6),
                       ],
                     )
                   : null,
@@ -345,7 +390,6 @@ class _BlockCellState extends State<_BlockCell>
                   ? cellColor.withValues(alpha: isBreaking ? 0.4 : 1.0)
                   : null,
               border: Border.all(
-                // <--- NEW: Highlight Edge (matching piece style)
                 color: (widget.block.type == BlockType.filled ||
                         widget.block.type == BlockType.hoverBreakFilled)
                     ? Colors.white.withValues(alpha: 0.3)
@@ -361,7 +405,6 @@ class _BlockCellState extends State<_BlockCell>
               boxShadow: [
                 if (widget.block.type == BlockType.filled ||
                     widget.block.type == BlockType.hoverBreakFilled) ...[
-                  // <--- NEW: Neon Glow (matching piece style)
                   BoxShadow(
                     color: cellColor.withValues(alpha: 0.4),
                     blurRadius: 4,

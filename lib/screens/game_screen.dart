@@ -12,7 +12,8 @@ import '../cubits/settings/settings_state.dart';
 import '../models/board.dart';
 import '../models/game_mode.dart';
 import '../models/story_level.dart';
-import '../models/power_up.dart';
+// DISABLED: Power-up bar hidden
+// import '../models/power_up.dart';
 import '../widgets/board_grid_widget.dart';
 import '../widgets/hand_pieces_widget.dart';
 import '../widgets/game_hud_widget.dart';
@@ -20,7 +21,8 @@ import '../widgets/draggable_piece_widget.dart';
 import '../widgets/particle_effect_widget.dart';
 import '../widgets/animated_background_widget.dart';
 import '../widgets/screen_shake_widget.dart';
-import '../widgets/shared_ui_components.dart';
+// DISABLED: Power-up bar hidden
+// import '../widgets/shared_ui_components.dart';
 import '../widgets/floating_score_overlay.dart';
 
 // Safe vibration helper for web compatibility
@@ -94,9 +96,20 @@ class _GameScreenState extends State<GameScreen> {
 
         // Determine target mode
         final targetMode = widget.storyLevel?.gameMode ?? GameMode.classic;
-        // Check if we need to start a new game (no game active OR mode mismatch)
+
+        // CRITICAL FIX: Also check if story level changed, not just game mode
+        // This prevents the bug where Classic mode game continues when opening a Story level
+        // that also uses Classic mode (e.g., Story Level 1 uses Classic mode)
+        final currentState = gameCubit.state;
+        final currentLevelNumber = (currentState is GameInProgress)
+            ? currentState.storyLevel?.levelNumber
+            : null;
+        final targetLevelNumber = widget.storyLevel?.levelNumber;
+
+        // Check if we need to start a new game (no game active OR mode mismatch OR level mismatch)
         if (!gameCubit.hasActiveGame ||
-            gameCubit.currentGameMode != targetMode) {
+            gameCubit.currentGameMode != targetMode ||
+            currentLevelNumber != targetLevelNumber) {
           // Schedule game start after the current frame to avoid setState during build
           WidgetsBinding.instance.addPostFrameCallback((_) {
             gameCubit.startGame(targetMode, storyLevel: widget.storyLevel);
@@ -352,28 +365,32 @@ class _GameScreenState extends State<GameScreen> {
 
                                 return Column(
                                   children: [
-                                    // Header with back button and score
+                                    // Header with back button and centered score/combo
                                     Padding(
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 16.0, vertical: 8.0),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
+                                      child: Stack(
+                                        alignment: Alignment.center,
                                         children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.arrow_back,
-                                                color: AppConfig.textPrimary),
-                                            onPressed: () {
-                                              final gameCubit =
-                                                  context.read<GameCubit>();
-                                              // Save game before going back
-                                              gameCubit.saveGame();
-                                              // Stop the timer when leaving to prevent it from running in background
-                                              gameCubit.pauseTimer();
-                                              Navigator.pop(context);
-                                            },
+                                          // Back button on the left
+                                          Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: IconButton(
+                                              icon: const Icon(Icons.arrow_back,
+                                                  color: AppConfig.textPrimary),
+                                              onPressed: () {
+                                                final gameCubit =
+                                                    context.read<GameCubit>();
+                                                // Save game before going back
+                                                gameCubit.saveGame();
+                                                // Stop the timer when leaving to prevent it from running in background
+                                                gameCubit.pauseTimer();
+                                                Navigator.pop(context);
+                                              },
+                                            ),
                                           ),
-                                          const Flexible(
+                                          // Score and combo centered in the middle
+                                          const Center(
                                             child: GameHudWidget(),
                                           ),
                                         ],
@@ -406,7 +423,8 @@ class _GameScreenState extends State<GameScreen> {
                                       child: HandPiecesWidget(),
                                     ),
 
-                                    // Power-Up Bar
+                                    // DISABLED: Power-Up Bar
+                                    /*
                                     BlocBuilder<SettingsCubit, SettingsState>(
                                       builder: (context, settingsState) {
                                         return _buildPowerUpBar(context,
@@ -414,6 +432,8 @@ class _GameScreenState extends State<GameScreen> {
                                       },
                                     ),
 
+                                    const SizedBox(height: 8),
+                                    */
                                     const SizedBox(height: 8),
                                   ],
                                 );
@@ -735,7 +755,8 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   // ========== Power-Up UI Methods ==========
-
+  // DISABLED: Power-up bar hidden
+  /*
   Widget _buildPowerUpBar(BuildContext context, SettingsCubit settingsCubit) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -832,4 +853,5 @@ class _GameScreenState extends State<GameScreen> {
       ),
     );
   }
+  */
 }

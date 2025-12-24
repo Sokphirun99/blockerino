@@ -169,6 +169,12 @@ class GameCubit extends Cubit<GameState> {
         r.toLowerCase().contains('no power') ||
         r.toLowerCase().contains('without power'));
 
+    // Calculate exact end time for timestamp-based timing (prevents timer cheating)
+    final DateTime? levelEndTime =
+        level.timeLimit != null && level.timeLimit! > 0
+            ? DateTime.now().add(Duration(seconds: level.timeLimit!))
+            : null;
+
     emit(GameInProgress(
       board: board,
       hand: hand,
@@ -181,6 +187,7 @@ class GameCubit extends Cubit<GameState> {
       linesCleared: 0,
       timeRemaining: level.timeLimit ?? -1,
       powerUpsDisabled: powerUpsDisabled,
+      levelEndTime: levelEndTime,
     ));
 
     // Start timer if level has time limit
@@ -193,17 +200,23 @@ class GameCubit extends Cubit<GameState> {
     _storyTimer?.cancel();
     _storyTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final currentState = state;
-      if (currentState is! GameInProgress || currentState.timeRemaining <= 0) {
+      if (currentState is! GameInProgress ||
+          currentState.levelEndTime == null) {
         timer.cancel();
-        if (currentState is GameInProgress && currentState.timeRemaining == 0) {
-          // Time's up - check if objectives were met
-          _endStoryLevel(currentState, timeUp: true);
-        }
         return;
       }
 
-      emit(
-          currentState.copyWith(timeRemaining: currentState.timeRemaining - 1));
+      // Calculate remaining time based on wall clock (prevents timer cheating)
+      final now = DateTime.now();
+      final remaining = currentState.levelEndTime!.difference(now).inSeconds;
+
+      if (remaining <= 0) {
+        // Time's up - check if objectives were met
+        timer.cancel();
+        _endStoryLevel(currentState, timeUp: true);
+      } else {
+        emit(currentState.copyWith(timeRemaining: remaining));
+      }
     });
   }
 
@@ -392,11 +405,11 @@ class GameCubit extends Cubit<GameState> {
     final currentState = state;
     if (currentState is! GameInProgress) return;
 
-    // CRITICAL FIX: Clone board before clearing to avoid mutating state directly
-    final newBoard = currentState.board.clone();
-    newBoard.clearHoverBlocks();
+    // CRITICAL PERFORMANCE FIX: Don't clone the board when clearing hover
+    // Just clear hover state fields. The board doesn't store hover blocks anymore
+    // (they're calculated in the widget layer), so no need to mutate the board.
     emit(currentState.copyWith(
-      board: newBoard,
+      // DO NOT pass board here - keep the same board reference
       hoverPiece: null,
       hoverX: null,
       hoverY: null,
@@ -416,18 +429,16 @@ class GameCubit extends Cubit<GameState> {
       return; // Position unchanged, skip expensive operations
     }
 
-    // Clone the board before mutation
-    final newBoard = currentState.board.clone();
-    newBoard.clearHoverBlocks();
+    // CRITICAL PERFORMANCE FIX: Don't clone the board during hover preview
+    // Cloning the board changes its reference, causing BlocSelector to rebuild
+    // the entire static board layer even though only hover visualization changed.
+    // Instead, only update hover state fields. Hover break visualization is
+    // calculated in the widget layer based on hover state.
+    final canPlace = currentState.board.canPlacePiece(piece, x, y);
 
-    final canPlace = newBoard.canPlacePiece(piece, x, y);
-    if (canPlace) {
-      newBoard.updateHoveredBreaks(piece, x, y);
-    }
-
-    // Update hover preview for ghost piece
+    // Update hover preview for ghost piece WITHOUT cloning the board
     emit(currentState.copyWith(
-      board: newBoard,
+      // DO NOT pass board here - keep the same board reference
       hoverPiece: piece,
       hoverX: x,
       hoverY: y,
@@ -592,6 +603,7 @@ class GameCubit extends Cubit<GameState> {
       linesCleared: newLinesCleared,
       timeRemaining: currentState.timeRemaining,
       powerUpsDisabled: currentState.powerUpsDisabled,
+      levelEndTime: currentState.levelEndTime,
     ));
 
     return true;
