@@ -212,17 +212,31 @@ class SettingsCubit extends Cubit<SettingsState> {
 
   Future<void> spendCoins(int amount) async {
     if (state.coins >= amount) {
+      // CRITICAL FIX: Use optimistic update to prevent double-spend exploit
+      // Update UI state immediately, then sync to database in background
+      // This prevents rapid taps from passing the coin check multiple times
+      final oldCoins = state.coins;
       final newCoins = state.coins - amount;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('coins', newCoins);
-
-      // Sync to Firestore
-      final uid = _authService.currentUser?.uid;
-      if (uid != null) {
-        await _firestoreService.spendCoins(uid, amount);
-      }
-
+      
+      // 1. Optimistic Update: Update UI immediately
       emit(state.copyWith(coins: newCoins));
+
+      // 2. Perform Background Work (database sync)
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('coins', newCoins);
+
+        // Sync to Firestore
+        final uid = _authService.currentUser?.uid;
+        if (uid != null) {
+          await _firestoreService.spendCoins(uid, amount);
+        }
+      } catch (e) {
+        // Rollback on error to maintain data consistency
+        debugPrint('Error spending coins, rolling back: $e');
+        emit(state.copyWith(coins: oldCoins));
+        rethrow; // Re-throw to allow caller to handle the error
+      }
     }
   }
 
@@ -463,32 +477,46 @@ class SettingsCubit extends Cubit<SettingsState> {
       return false;
     }
 
-    // Spend coins
+    // CRITICAL FIX: Use optimistic update to prevent double-spend exploit
+    // Update UI state immediately, then sync to database in background
+    final oldCoins = state.coins;
     final newCoins = state.coins - theme.cost;
     final newUnlockedThemes = List<String>.from(state.unlockedThemeIds)
       ..add(themeId);
 
-    // Save to preferences
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('coins', newCoins);
-    await prefs.setStringList('unlockedThemeIds', newUnlockedThemes);
-
-    // Sync coins to Firestore
-    final uid = _authService.currentUser?.uid;
-    if (uid != null) {
-      await _firestoreService.spendCoins(uid, theme.cost);
-    }
-
-    // Track purchase
-    await _analyticsService.logPurchase(
-      itemName: 'theme_${theme.name}',
-      coinCost: theme.cost,
-    );
-
+    // 1. Optimistic Update: Update UI immediately
     emit(state.copyWith(
       coins: newCoins,
       unlockedThemeIds: newUnlockedThemes,
     ));
+
+    // 2. Perform Background Work (database sync)
+    try {
+      // Save to preferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('coins', newCoins);
+      await prefs.setStringList('unlockedThemeIds', newUnlockedThemes);
+
+      // Sync coins to Firestore
+      final uid = _authService.currentUser?.uid;
+      if (uid != null) {
+        await _firestoreService.spendCoins(uid, theme.cost);
+      }
+
+      // Track purchase
+      await _analyticsService.logPurchase(
+        itemName: 'theme_${theme.name}',
+        coinCost: theme.cost,
+      );
+    } catch (e) {
+      // Rollback on error to maintain data consistency
+      debugPrint('Error purchasing theme, rolling back: $e');
+      emit(state.copyWith(
+        coins: oldCoins,
+        unlockedThemeIds: state.unlockedThemeIds,
+      ));
+      return false;
+    }
 
     return true;
   }
