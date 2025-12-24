@@ -5,12 +5,6 @@ import '../config/app_config.dart';
 import '../cubits/game/game_cubit.dart';
 import '../cubits/game/game_state.dart';
 
-// #region agent log
-void _ghostDebugLog(String message, Map<String, dynamic> data) {
-  debugPrint('[DEBUG:GHOST] $message: $data');
-}
-// #endregion
-
 /// A semi-transparent ghost preview of a piece that shows where it will be placed
 /// This makes it instantly obvious if a piece fits
 class GhostPiecePreview extends StatelessWidget {
@@ -29,23 +23,7 @@ class GhostPiecePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // #region agent log
-    _ghostDebugLog('build called', {
-      'piece': piece?.id,
-      'gridX': gridX,
-      'gridY': gridY,
-      'isValid': isValid,
-    });
-    // #endregion
-
     if (piece == null || gridX < 0 || gridY < 0) {
-      // #region agent log
-      _ghostDebugLog('early return - invalid params', {
-        'pieceNull': piece == null,
-        'gridX': gridX,
-        'gridY': gridY,
-      });
-      // #endregion
       return const SizedBox.shrink();
     }
 
@@ -56,12 +34,13 @@ class GhostPiecePreview extends StatelessWidget {
     final board = currentState.board;
 
     // CRITICAL FIX: Calculate cell size to match actual grid layout
-    // The grid is inside Padding(4.0), so available space is boardSize - 8
-    // Each cell uses Expanded, so cell size = (boardSize - 8) / gridSize
-    // This matches the actual grid cell size, not getBlockSize which accounts for borders
+    // The Stack (gridKey) is inside Padding(4.0), so available space = boardSize - (padding * 2)
+    // Each cell uses Expanded, so cell size = availableSize / gridSize
+    // This matches the actual grid cell size used by the Column/Row/Expanded layout
     final boardSize = AppConfig.getSize(context);
     final availableSize = boardSize -
-        (AppConfig.boardContainerPadding * 2); // Subtract padding on both sides
+        (AppConfig.boardContainerPadding *
+            2); // Subtract padding on both sides (4.0 * 2 = 8.0)
     final cellSize =
         availableSize / board.size; // Size of each grid cell (including margin)
     const blockMargin =
@@ -75,20 +54,6 @@ class GhostPiecePreview extends StatelessWidget {
     // Block size for individual blocks (cellSize - 2*margin)
     final blockSize = cellSize - (blockMargin * 2);
 
-    // #region agent log
-    _ghostDebugLog('positioning', {
-      'boardSize': boardSize,
-      'availableSize': availableSize,
-      'cellSize': cellSize,
-      'blockSize': blockSize,
-      'offsetX': offsetX,
-      'offsetY': offsetY,
-      'gridX': gridX,
-      'gridY': gridY,
-      'gridSize': board.size,
-    });
-    // #endregion
-
     // Store piece in local variable to avoid repeated null checks
     final pieceData = piece!;
 
@@ -96,10 +61,8 @@ class GhostPiecePreview extends StatelessWidget {
       left: offsetX,
       top: offsetY,
       child: SizedBox(
-        width: pieceData.width *
-            cellSize, // Use cellSize for total width (includes margins)
-        height: pieceData.height *
-            cellSize, // Use cellSize for total height (includes margins)
+        width: pieceData.width * cellSize, // Total width
+        height: pieceData.height * cellSize, // Total height
         child: Stack(
           children: [
             // Draw the piece shape
@@ -107,38 +70,48 @@ class GhostPiecePreview extends StatelessWidget {
               for (int col = 0; col < pieceData.width; col++)
                 if (pieceData.shape[row][col])
                   Positioned(
-                    left: col * cellSize +
-                        blockMargin, // Position within cell, accounting for margin
-                    top: row * cellSize +
-                        blockMargin, // Position within cell, accounting for margin
+                    left: col * cellSize + blockMargin,
+                    top: row * cellSize + blockMargin,
                     child: Container(
                       width:
-                          blockSize, // Block size already accounts for margins
+                          blockSize, // No extra margin needed - already accounted
                       height:
-                          blockSize, // Block size already accounts for margins
-                      margin:
-                          const EdgeInsets.all(1), // Match _BlockCell margin
+                          blockSize, // No extra margin needed - already accounted
+                      // REMOVED: margin: EdgeInsets.all(1) - this was causing double margin
                       decoration: BoxDecoration(
-                        // Use single opacity level to preserve color accuracy
+                        // Improved visibility: higher opacity and better contrast
                         color: isValid
-                            ? pieceData.color.withValues(alpha: 0.4)
-                            : Colors.grey.withValues(alpha: 0.2),
+                            ? pieceData.color
+                                .withValues(alpha: 0.6) // Increased from 0.4
+                            : Colors.red.withValues(
+                                alpha:
+                                    0.4), // Changed from grey, increased opacity
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(
                           color: isValid
-                              ? pieceData.color.withValues(alpha: 0.7)
-                              : Colors.red.withValues(alpha: 0.5),
-                          width: 2,
+                              ? pieceData.color
+                                  .withValues(alpha: 1.0) // More visible border
+                              : Colors.red.withValues(
+                                  alpha: 0.9), // Strong red border for invalid
+                          width: 2.5, // Slightly thicker for visibility
                         ),
-                        boxShadow: isValid
-                            ? [
-                                BoxShadow(
-                                  color: pieceData.color.withValues(alpha: 0.3),
-                                  blurRadius: 8,
-                                  spreadRadius: 1,
-                                ),
-                              ]
-                            : null,
+                        boxShadow: [
+                          // Always show shadow for better visibility
+                          BoxShadow(
+                            color: isValid
+                                ? pieceData.color.withValues(alpha: 0.5)
+                                : Colors.red.withValues(alpha: 0.4),
+                            blurRadius: isValid ? 12 : 8,
+                            spreadRadius: isValid ? 2 : 1,
+                          ),
+                          // Additional glow for valid placements
+                          if (isValid)
+                            BoxShadow(
+                              color: pieceData.color.withValues(alpha: 0.3),
+                              blurRadius: 20,
+                              spreadRadius: 4,
+                            ),
+                        ],
                       ),
                     ),
                   ),
