@@ -17,7 +17,8 @@ class StoryLevel {
   final int targetScore;
   final int? targetLines;
   final int? timeLimit; // in seconds, null = no limit
-  final List<String> restrictions; // e.g., "No power-ups", "Only 2 pieces per hand"
+  final List<String>
+      restrictions; // e.g., "No power-ups", "Only 2 pieces per hand"
   final int starThreshold1; // Score for 1 star
   final int starThreshold2; // Score for 2 stars
   final int starThreshold3; // Score for 3 stars
@@ -92,9 +93,9 @@ class StoryLevel {
       gameMode: GameMode.story,
       difficulty: LevelDifficulty.easy,
       targetScore: 300,
-      starThreshold1: 300,
-      starThreshold2: 500,
-      starThreshold3: 700,
+      starThreshold1: 250, // 1 star: Below target (allow some leniency)
+      starThreshold2: 300, // 2 stars: Reach target (completion)
+      starThreshold3: 500, // 3 stars: Exceed target significantly
       coinReward: 50,
       isUnlocked: true,
     ),
@@ -106,9 +107,9 @@ class StoryLevel {
       gameMode: GameMode.story,
       difficulty: LevelDifficulty.easy,
       targetScore: 600,
-      starThreshold1: 600,
-      starThreshold2: 1000,
-      starThreshold3: 1400,
+      starThreshold1: 500, // 1 star: Below target
+      starThreshold2: 600, // 2 stars: Reach target
+      starThreshold3: 1000, // 3 stars: Exceed target
       coinReward: 75,
     ),
     StoryLevel(
@@ -119,24 +120,25 @@ class StoryLevel {
       gameMode: GameMode.story,
       difficulty: LevelDifficulty.medium,
       targetScore: 1200,
-      starThreshold1: 1200,
-      starThreshold2: 1800,
-      starThreshold3: 2500,
+      starThreshold1: 1000, // 1 star: Below target
+      starThreshold2: 1200, // 2 stars: Reach target
+      starThreshold3: 1800, // 3 stars: Exceed target
       coinReward: 100,
     ),
-    
+
     // World 2: Chaos Introduction
     StoryLevel(
       levelNumber: 4,
       title: 'Embrace Chaos',
       description: 'Try the Chaos mode',
-      story: 'Things are about to get wild! In Chaos mode, anything can happen.',
+      story:
+          'Things are about to get wild! In Chaos mode, anything can happen.',
       gameMode: GameMode.chaos,
       difficulty: LevelDifficulty.medium,
       targetScore: 1500,
-      starThreshold1: 1500,
-      starThreshold2: 2200,
-      starThreshold3: 3000,
+      starThreshold1: 1300, // 1 star: Below target
+      starThreshold2: 1500, // 2 stars: Reach target
+      starThreshold3: 2200, // 3 stars: Exceed target
       coinReward: 150,
     ),
     StoryLevel(
@@ -148,12 +150,12 @@ class StoryLevel {
       difficulty: LevelDifficulty.medium,
       targetScore: 2000,
       timeLimit: 180,
-      starThreshold1: 2000,
-      starThreshold2: 2800,
-      starThreshold3: 3500,
+      starThreshold1: 1700, // 1 star: Below target
+      starThreshold2: 2000, // 2 stars: Reach target
+      starThreshold3: 2800, // 3 stars: Exceed target
       coinReward: 200,
     ),
-    
+
     // World 3: Expert Challenges
     StoryLevel(
       levelNumber: 6,
@@ -164,9 +166,9 @@ class StoryLevel {
       difficulty: LevelDifficulty.hard,
       targetScore: 3000,
       restrictions: ['No invalid placements allowed', 'Perfect play only'],
-      starThreshold1: 3000,
-      starThreshold2: 4200,
-      starThreshold3: 6000,
+      starThreshold1: 2600, // 1 star: Below target
+      starThreshold2: 3000, // 2 stars: Reach target
+      starThreshold3: 4200, // 3 stars: Exceed target
       coinReward: 300,
     ),
     StoryLevel(
@@ -177,9 +179,9 @@ class StoryLevel {
       gameMode: GameMode.chaos,
       difficulty: LevelDifficulty.hard,
       targetScore: 5000,
-      starThreshold1: 5000,
-      starThreshold2: 7000,
-      starThreshold3: 10000,
+      starThreshold1: 4300, // 1 star: Below target
+      starThreshold2: 5000, // 2 stars: Reach target
+      starThreshold3: 7000, // 3 stars: Exceed target
       coinReward: 500,
     ),
     StoryLevel(
@@ -191,9 +193,9 @@ class StoryLevel {
       difficulty: LevelDifficulty.expert,
       targetScore: 8000,
       timeLimit: 300,
-      starThreshold1: 8000,
-      starThreshold2: 12000,
-      starThreshold3: 18000,
+      starThreshold1: 7000, // 1 star: Below target
+      starThreshold2: 8000, // 2 stars: Reach target
+      starThreshold3: 12000, // 3 stars: Exceed target
       coinReward: 1000,
     ),
   ];
