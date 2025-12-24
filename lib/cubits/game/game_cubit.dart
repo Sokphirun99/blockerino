@@ -27,6 +27,8 @@ class _SavedGameState {
   final bool gameOver;
   final List<int> pieceBag; // Save bag state to prevent reroll exploits
   final int bagIndex; // Save bag index
+  final int
+      bagRefillCount; // Save bag refill count for rotating distribution fairness
 
   _SavedGameState({
     required this.board,
@@ -37,6 +39,7 @@ class _SavedGameState {
     required this.gameOver,
     required this.pieceBag,
     required this.bagIndex,
+    required this.bagRefillCount,
   });
 }
 
@@ -51,6 +54,8 @@ class GameCubit extends Cubit<GameState> {
   // FIX: Changed from static to instance variables so each game session is independent
   List<int> _pieceBag = [];
   int _bagIndex = 0;
+  int _bagRefillCount =
+      0; // Track bag refills for rotating distribution fairness
 
   // Story mode timer
   Timer? _storyTimer;
@@ -93,18 +98,23 @@ class GameCubit extends Cubit<GameState> {
 
     // Save current game state before switching modes (if there's an active game)
     final currentState = state;
-    if (currentState is GameInProgress && currentState.gameMode != mode) {
+
+    // Determine the actual game mode we'll be using
+    // Story levels can use any mode (chaos, classic, etc.), so use level's mode if provided
+    final targetMode = storyLevel?.gameMode ?? mode;
+
+    // Save current game if mode is changing (even for story mode transitions)
+    if (currentState is GameInProgress && currentState.gameMode != targetMode) {
       _saveCurrentGame(currentState);
     }
 
     // If coming from GameOver, clear the saved game for this mode
-    if (currentState is GameOver && currentState.gameMode == mode) {
-      _savedGames.remove(mode);
+    if (currentState is GameOver && currentState.gameMode == targetMode) {
+      _savedGames.remove(targetMode);
     }
 
     // Story mode doesn't support save/load - always start fresh
-    // FIX: Check for storyLevel first, regardless of mode
-    // Some story levels use GameMode.chaos or other modes, not just GameMode.story
+    // FIX: Check for storyLevel but still handle mode transitions properly
     if (storyLevel != null) {
       // Use the story level's game mode, not the passed mode parameter
       _startStoryGame(storyLevel);
@@ -124,6 +134,8 @@ class GameCubit extends Cubit<GameState> {
       // Start fresh game
       _pieceBag.clear(); // Reset bag for new game
       _bagIndex = 0;
+      _bagRefillCount =
+          0; // CRITICAL FIX: Reset refill count for consistent rotation pattern
 
       final config = GameModeConfig.fromMode(mode);
       final board = Board(size: config.boardSize);
@@ -143,6 +155,8 @@ class GameCubit extends Cubit<GameState> {
   void _startStoryGame(StoryLevel level) {
     _pieceBag.clear(); // Reset bag for new story level
     _bagIndex = 0;
+    _bagRefillCount =
+        0; // CRITICAL FIX: Reset refill count for consistent rotation pattern
 
     // FIX: Use the story level's game mode, not hardcoded GameMode.story
     // Some story levels use GameMode.chaos or other modes
@@ -209,6 +223,8 @@ class GameCubit extends Cubit<GameState> {
       gameOver: false,
       pieceBag: List.from(_pieceBag), // Save current bag state
       bagIndex: _bagIndex, // Save current bag index
+      bagRefillCount:
+          _bagRefillCount, // CRITICAL FIX: Save refill count for rotating distribution
     );
     _saveToPersistentStorage();
   }
@@ -236,6 +252,8 @@ class GameCubit extends Cubit<GameState> {
           'pieceBag':
               gameState.pieceBag, // Serialize bag to prevent reroll exploits
           'bagIndex': gameState.bagIndex, // Serialize bag index
+          'bagRefillCount':
+              gameState.bagRefillCount, // CRITICAL FIX: Serialize refill count
         };
       });
 
@@ -274,6 +292,8 @@ class GameCubit extends Cubit<GameState> {
               pieceBag:
                   List<int>.from(gameData['pieceBag'] ?? []), // Load bag state
               bagIndex: gameData['bagIndex'] ?? 0, // Load bag index
+              bagRefillCount: gameData['bagRefillCount'] ??
+                  0, // CRITICAL FIX: Load refill count (default to 0 for old saves)
             );
           } catch (e) {
             debugPrint('Error loading saved game for mode $modeStr: $e');
@@ -289,9 +309,66 @@ class GameCubit extends Cubit<GameState> {
     final savedGame = _savedGames[mode];
     if (savedGame == null) return;
 
-    // Restore bag state to prevent reroll exploits
+    // CRITICAL FIX: Validate board size matches mode configuration
+    // If saved game has wrong board size (corruption or mode mismatch), create fresh game
+    final config = GameModeConfig.fromMode(mode);
+    if (savedGame.board.size != config.boardSize) {
+      debugPrint(
+          'WARNING: Saved game for $mode has wrong board size (${savedGame.board.size} vs ${config.boardSize}). Creating fresh game.');
+      // Remove corrupted save
+      _savedGames.remove(mode);
+      // Start fresh game with correct size
+      _pieceBag.clear();
+      _bagIndex = 0;
+      _bagRefillCount = 0; // CRITICAL FIX: Reset refill count for fresh game
+      final board = Board(size: config.boardSize);
+      final hand = _generateRandomHand(config.handSize);
+      emit(GameInProgress(
+        board: board,
+        hand: hand,
+        score: 0,
+        combo: 0,
+        lastBrokenLine: 0,
+        gameMode: mode,
+      ));
+      return;
+    }
+
+    // CRITICAL FIX: Restore bag state BEFORE checking hand size
+    // This ensures piece bag is restored even if hand size needs correction
+    // Restoring bag state first maintains the random sequence integrity
     _pieceBag = List.from(savedGame.pieceBag);
     _bagIndex = savedGame.bagIndex;
+    _bagRefillCount = savedGame
+        .bagRefillCount; // CRITICAL FIX: Restore refill count for correct rotation pattern
+
+    // CRITICAL FIX: Validate hand size matches mode configuration
+    // If saved game has wrong hand size, fix it by regenerating hand
+    // Note: Piece bag has already been restored above, so regenerated hand
+    // will use the correct saved bag state
+    if (savedGame.hand.length != config.handSize) {
+      debugPrint(
+          'WARNING: Saved game for $mode has wrong hand size (${savedGame.hand.length} vs ${config.handSize}). Regenerating hand.');
+      // Regenerate hand with correct size using the restored piece bag
+      final hand = _generateRandomHand(config.handSize);
+      if (savedGame.gameOver) {
+        emit(GameOver(
+          board: savedGame.board,
+          finalScore: savedGame.score,
+          gameMode: mode,
+        ));
+      } else {
+        emit(GameInProgress(
+          board: savedGame.board,
+          hand: hand,
+          score: savedGame.score,
+          combo: savedGame.combo,
+          lastBrokenLine: savedGame.lastBrokenLine,
+          gameMode: mode,
+        ));
+      }
+      return;
+    }
 
     if (savedGame.gameOver) {
       emit(GameOver(
@@ -348,11 +425,6 @@ class GameCubit extends Cubit<GameState> {
       newBoard.updateHoveredBreaks(piece, x, y);
     }
 
-    // #region agent log
-    debugPrint(
-        '[DEBUG:HOVER] showHoverPreview: x=$x, y=$y, canPlace=$canPlace, pieceId=${piece.id}');
-    // #endregion
-
     // Update hover preview for ghost piece
     emit(currentState.copyWith(
       board: newBoard,
@@ -364,18 +436,10 @@ class GameCubit extends Cubit<GameState> {
   }
 
   bool placePiece(Piece piece, int x, int y) {
-    // #region agent log
-    debugPrint(
-        '[DEBUG:B] GameCubit.placePiece: x=$x, y=$y, pieceId=${piece.id}');
-    // #endregion
     final currentState = state;
     if (currentState is! GameInProgress) return false;
 
     final canPlace = currentState.board.canPlacePiece(piece, x, y);
-    // #region agent log
-    debugPrint(
-        '[DEBUG:B] GameCubit.placePiece: canPlace=$canPlace, boardSize=${currentState.board.size}');
-    // #endregion
     if (!canPlace) {
       _soundService.playError();
       // CRITICAL FIX: Clear hover blocks even on failed placement
@@ -421,11 +485,14 @@ class GameCubit extends Cubit<GameState> {
       newLastBrokenLine = 0;
       newCombo += linesBroken;
 
-      // Score calculation
-      final config = GameModeConfig.fromMode(currentState.gameMode);
-      newScore +=
-          (linesBroken * config.boardSize * (newCombo / 2) * pieceBlockCount)
-              .round();
+      // Score calculation - Simplified and balanced formula
+      // Base line bonus: 10 points per line
+      // Combo multiplier: Increases every 10 combo points (1x → 2x → 3x...)
+      // CRITICAL FIX: Use floor() + 1 instead of ceil() for correct progression
+      // 0-9 combo → 1x, 10-19 → 2x, 20-29 → 3x, etc.
+      final comboMultiplier = ((newCombo / 10).floor() + 1).clamp(1, 10);
+      final lineBonus = linesBroken * 10 * comboMultiplier; // Cap at 10x
+      newScore += lineBonus;
 
       // Play clear and combo sounds
       _soundService.playClear(linesBroken);
@@ -439,8 +506,10 @@ class GameCubit extends Cubit<GameState> {
       }
     } else {
       newLastBrokenLine++;
-      final config = GameModeConfig.fromMode(currentState.gameMode);
-      if (newLastBrokenLine >= config.handSize) {
+      // FIX: Use constant 3-move buffer instead of handSize
+      // This ensures consistent combo behavior across all game modes
+      // Combo resets after 4 moves without clearing (allows 3 moves buffer)
+      if (newLastBrokenLine > 3) {
         newCombo = 0;
       }
     }
@@ -830,23 +899,51 @@ class GameCubit extends Cubit<GameState> {
   }
 
   /// Refill the piece bag with weighted distribution (Fisher-Yates shuffle)
+  /// Target distribution: 50% Easy, 35% Medium, 15% Hard
   void _refillPieceBag() {
     _pieceBag.clear();
+    _bagRefillCount++; // Increment counter for rotating distribution fairness
 
-    // Easy (Singles, Doubles, Triples): 20, 21, 22, 23, 24
-    for (int i = 0; i < 5; i++) {
+    // Easy pieces (Singles, Doubles, Triples): 20, 21, 22, 23, 24
+    // Target: 50% of bag
+    // Add 10 copies of each (5 pieces × 10 = 50 pieces = 50% of 100)
+    for (int i = 0; i < 10; i++) {
       _pieceBag.addAll([20, 21, 22, 23, 24]);
     }
 
-    // Medium (L-shapes, T-shapes, etc.): 0-15
-    for (int i = 0; i < 3; i++) {
-      _pieceBag.addAll(List.generate(16, (index) => index)); // 0..15
-    }
-
-    // Hard (3x3, 4x1, 5x1): 16, 17, 18, 19, 25, 26
+    // Medium pieces (L-shapes, T-shapes, etc.): 0-15
+    // Target: 35% of bag (35 pieces total)
+    // To ensure equal distribution: 35 / 16 = 2.1875 pieces each
+    // Strategy: Add 2 copies of each piece (32 pieces), then rotate which 3 pieces get an extra copy
     for (int i = 0; i < 2; i++) {
-      _pieceBag.addAll([16, 17, 18, 19, 25, 26]);
+      _pieceBag.addAll(List.generate(
+          16, (index) => index)); // 0..15 (2 copies each = 32 pieces)
     }
+    // CRITICAL FIX: Rotate which pieces get the extra copy to ensure equal probability over time
+    // Instead of always adding to [0, 1, 2], rotate through all pieces for fairness
+    final startIndex = (_bagRefillCount * 3) % 16;
+    _pieceBag.addAll([
+      startIndex % 16,
+      (startIndex + 1) % 16,
+      (startIndex + 2) % 16,
+    ]); // Rotating distribution (total: 35 pieces)
+
+    // Hard pieces (3x3, 4x1, 5x1): 16, 17, 18, 19, 25, 26
+    // Target: 15% of bag (15 pieces total)
+    // To ensure equal distribution: 15 / 6 = 2.5 pieces each
+    // Strategy: Add 2 copies of each piece (12 pieces), then rotate which 3 pieces get an extra copy
+    final hardPieces = [16, 17, 18, 19, 25, 26];
+    for (int i = 0; i < 2; i++) {
+      _pieceBag.addAll(hardPieces); // 2 copies each = 12 pieces
+    }
+    // CRITICAL FIX: Rotate which pieces get the extra copy to ensure equal probability over time
+    // Instead of always adding to [16, 17, 18], rotate through all hard pieces for fairness
+    final hardStartIndex = (_bagRefillCount * 3) % hardPieces.length;
+    _pieceBag.addAll([
+      hardPieces[hardStartIndex % hardPieces.length],
+      hardPieces[(hardStartIndex + 1) % hardPieces.length],
+      hardPieces[(hardStartIndex + 2) % hardPieces.length],
+    ]); // Rotating distribution (total: 15 pieces)
 
     // Fisher-Yates shuffle with proper RNG
     final rng = math.Random();
