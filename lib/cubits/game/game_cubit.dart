@@ -354,12 +354,21 @@ class GameCubit extends Cubit<GameState> {
 
   void _loadSavedGame(GameMode mode) {
     final savedGame = _savedGames[mode];
-    if (savedGame == null) return;
+    if (savedGame == null) {
+      debugPrint('No saved game found for mode: $mode');
+      return;
+    }
+
+    debugPrint(
+        'Loading saved game for $mode: hand size=${savedGame.hand.length}, board size=${savedGame.board.size}');
 
     // Validate board size matches mode configuration
     // CRITICAL FIX: Prevents loading 8x8 board for Chaos mode (expects 10x10) or vice versa
     // This can happen if saved game data is corrupted or from a different version
     final config = GameModeConfig.fromMode(mode);
+    debugPrint(
+        'Mode config for $mode: hand size=${config.handSize}, board size=${config.boardSize}');
+
     if (savedGame.board.size != config.boardSize) {
       debugPrint(
           'Saved game has wrong board size (${savedGame.board.size} vs ${config.boardSize}). Creating fresh game.');
@@ -392,14 +401,27 @@ class GameCubit extends Cubit<GameState> {
         .bagRefillCount; // CRITICAL FIX: Restore refill count for correct rotation pattern
 
     // CRITICAL FIX: Validate hand size matches mode configuration
-    // If saved game has wrong hand size, fix it by regenerating hand
-    // Note: Piece bag has already been restored above, so regenerated hand
-    // will use the correct saved bag state
-    if (savedGame.hand.length != config.handSize) {
+    // If saved game has wrong hand size, fix it by adjusting the hand
+    // BUG FIX: Preserve saved hand pieces instead of regenerating to prevent piece reset
+    List<Piece> hand = savedGame.hand;
+    if (hand.length != config.handSize) {
       debugPrint(
-          'Regenerating hand with correct size (${savedGame.hand.length} vs ${config.handSize}).');
-      // Regenerate hand with correct size using the restored piece bag
-      final hand = _generateRandomHand(config.handSize);
+          'Hand size mismatch (${hand.length} vs ${config.handSize}). Adjusting hand size.');
+
+      if (hand.length < config.handSize) {
+        // Hand is too small - add pieces from the restored bag
+        // This maintains the saved pieces and only adds what's needed
+        final additionalPieces =
+            _generateRandomHand(config.handSize - hand.length);
+        hand = [...hand, ...additionalPieces];
+        debugPrint('Added ${additionalPieces.length} pieces to hand');
+      } else {
+        // Hand is too large - trim to correct size (keep first N pieces)
+        hand = hand.take(config.handSize).toList();
+        debugPrint(
+            'Trimmed hand from ${savedGame.hand.length} to ${hand.length} pieces');
+      }
+
       if (savedGame.gameOver) {
         emit(GameOver(
           board: savedGame.board,
@@ -409,7 +431,7 @@ class GameCubit extends Cubit<GameState> {
       } else {
         final correctedState = GameInProgress(
           board: savedGame.board,
-          hand: hand, // Use regenerated hand with correct size
+          hand: hand, // Use adjusted hand preserving saved pieces
           score: savedGame.score,
           combo: savedGame.combo,
           lastBrokenLine: savedGame.lastBrokenLine,
@@ -429,6 +451,8 @@ class GameCubit extends Cubit<GameState> {
         gameMode: mode,
       ));
     } else {
+      debugPrint(
+          'Loading saved game with preserved hand: ${savedGame.hand.length} pieces');
       emit(GameInProgress(
         board: savedGame.board,
         hand: savedGame.hand,

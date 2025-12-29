@@ -26,6 +26,7 @@ dependencies:
   flutter_svg: ^2.0.14
   lottie: ^3.2.1
   shimmer: ^3.0.0
+  flame: ^1.19.0
   
   # UI Improvements
   gap: ^3.0.1
