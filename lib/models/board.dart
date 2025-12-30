@@ -223,6 +223,12 @@ class Board {
         // Note: BlockType.hover is no longer used (replaced by GhostPiecePreview widget)
       }
     }
+
+    // CRITICAL FIX: Update bitboard after clearing hover blocks
+    // The bitboard includes hoverBreakFilled blocks, so when we clear them from the grid,
+    // we must update the bitboard to reflect the change. Without this, canPlacePiece will
+    // incorrectly detect collisions with the ghost piece that was just cleared.
+    _updateBitboard();
   }
 
   // Update hover blocks to show which lines will be cleared
