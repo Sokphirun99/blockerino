@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:auto_size_text/auto_size_text.dart';
-import 'package:gap/gap.dart';
 import '../cubits/game/game_cubit.dart';
 import '../cubits/game/game_state.dart';
 import '../cubits/settings/settings_cubit.dart';
@@ -33,12 +32,12 @@ class _GameHudWidgetState extends State<GameHudWidget>
 
     _comboScaleAnimation = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween<double>(begin: 1.0, end: 1.4)
+        tween: Tween<double>(begin: 1.0, end: 1.3)
             .chain(CurveTween(curve: Curves.easeOut)),
         weight: 50,
       ),
       TweenSequenceItem(
-        tween: Tween<double>(begin: 1.4, end: 1.0)
+        tween: Tween<double>(begin: 1.3, end: 1.0)
             .chain(CurveTween(curve: Curves.elasticOut)),
         weight: 50,
       ),
@@ -70,20 +69,13 @@ class _GameHudWidgetState extends State<GameHudWidget>
     return '$minutes:${secs.toString().padLeft(2, '0')}';
   }
 
-  /// Get score text color based on combo level
-  Color _getComboScoreColor(int combo) {
-    switch (combo) {
-      case 2:
-        return const Color(0xFFFFD700); // Gold
-      case 3:
-        return const Color(0xFFFFA500); // Orange
-      case 4:
-        return const Color(0xFFFF4500); // Red-Orange
-      case 5:
-        return const Color(0xFFFF1493); // Deep Pink
-      default:
-        return const Color(0xFF00FFFF); // Cyan (max combo)
-    }
+  /// Get combo color based on combo level
+  Color _getComboColor(int combo) {
+    if (combo >= 10) return const Color(0xFFFF00FF); // Magenta
+    if (combo >= 7) return const Color(0xFFFF1493); // Deep Pink
+    if (combo >= 5) return const Color(0xFFFF4500); // Red-Orange
+    if (combo >= 3) return const Color(0xFFFFA500); // Orange
+    return const Color(0xFFFFD700); // Gold
   }
 
   bool _areObjectivesMet(GameInProgress gameState) {
@@ -146,9 +138,11 @@ class _GameHudWidgetState extends State<GameHudWidget>
         final comboProgress =
             gameState.combo > 0 ? movesLeft / config.handSize : 0.0;
         final isNewHighScore = gameState.score > settings.highScore;
+        final hasCombo = gameState.combo > 1;
 
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             // Story mode: Show time limit and objectives
             if (gameState.storyLevel != null) ...[
@@ -256,188 +250,265 @@ class _GameHudWidgetState extends State<GameHudWidget>
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
             ],
-            // High score indicator
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.star,
-                  color:
-                      isNewHighScore ? const Color(0xFFFFE66D) : Colors.white38,
-                  size: 12,
-                ),
-                const Gap(4),
-                Flexible(
-                  child: AutoSizeText(
-                    '${isNewHighScore ? gameState.score : settings.highScore}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: isNewHighScore
-                              ? const Color(0xFFFFE66D)
-                              : Colors.white38,
-                          fontSize: 10,
-                        ),
-                    maxLines: 1,
-                    minFontSize: 8,
-                  ),
-                ),
-              ],
-            ),
-            const Gap(2),
-            Text(
-              AppLocalizations.of(context).translate('score').toUpperCase(),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.white70,
-                    fontSize: 10,
-                  ),
-            ),
-            // Score with combo fire effect
-            ComboFireWidget(
-              combo: gameState.combo,
-              child: ComboGlowWidget(
-                comboLevel: gameState.combo,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 120),
-                  child: AutoSizeText(
-                    '${gameState.score}',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          color: gameState.combo > 1
-                              ? _getComboScoreColor(gameState.combo)
-                              : Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
-                    maxLines: 1,
-                    minFontSize: 18,
-                  ),
-                ),
-              ),
-            ),
-            if (gameState.combo > 1) ...[
-              const Gap(4),
-              AnimatedBuilder(
-                animation: _comboAnimationController,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: _comboScaleAnimation.value,
-                    child: ComboFireWidget(
-                      combo: gameState.combo,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [
-                              Color(0xFFFFD700),
-                              Color(0xFFFFE66D),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.white.withValues(
-                              alpha: 0.3 + (_comboGlowAnimation.value * 0.7),
-                            ),
-                            width: 2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFFFE66D).withValues(
-                                alpha: 0.3 + (_comboGlowAnimation.value * 0.5),
-                              ),
-                              blurRadius: 8 + (_comboGlowAnimation.value * 12),
-                              spreadRadius: 2 + (_comboGlowAnimation.value * 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text(
-                              '🔥',
-                              style: TextStyle(fontSize: 16),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              AppLocalizations.of(context).translate('combo'),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: Colors.black,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1,
-                                  ),
-                            ),
-                            const SizedBox(width: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                'x${gameState.combo}',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 4),
-              // Combo timer progress bar
-              Container(
-                width: 80,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: (comboProgress * 100).round().clamp(0, 100),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFE66D),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: ((1 - comboProgress) * 100).round().clamp(0, 100),
-                      child: const SizedBox.shrink(),
-                    ),
+
+            // Main Score & Combo Card
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.6),
+                    Colors.black.withValues(alpha: 0.4),
                   ],
                 ),
-              ),
-              const SizedBox(height: 2),
-              SizedBox(
-                width: 80,
-                child: Text(
-                  '$movesLeft ${AppLocalizations.of(context).translate('moves_left')}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white60,
-                        fontSize: 8,
-                      ),
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  width: 1.5,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: 12,
+                    spreadRadius: 2,
+                    offset: const Offset(0, 4),
+                  ),
+                  if (hasCombo)
+                    BoxShadow(
+                      color: _getComboColor(gameState.combo)
+                          .withValues(alpha: 0.3),
+                      blurRadius: 16,
+                      spreadRadius: 4,
+                    ),
+                ],
               ),
-            ],
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // High Score Indicator (if new high score)
+                  if (isNewHighScore) ...[
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.emoji_events,
+                          color: Color(0xFFFFE66D),
+                          size: 14,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'NEW BEST!',
+                          style: TextStyle(
+                            color: const Color(0xFFFFE66D),
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                  ],
+
+                  // Score Label
+                  Text(
+                    AppLocalizations.of(context)
+                        .translate('score')
+                        .toUpperCase(),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+
+                  // Score Value - IMPROVED FOR VISIBILITY
+                  ComboFireWidget(
+                    combo: gameState.combo,
+                    child: ComboGlowWidget(
+                      comboLevel: gameState.combo,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // STRONG BLACK OUTLINE for visibility against fire
+                          AutoSizeText(
+                            '${gameState.score}',
+                            style: TextStyle(
+                              foreground: Paint()
+                                ..style = PaintingStyle.stroke
+                                ..strokeWidth = 6
+                                ..color = Colors.black,
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                              height: 1.0,
+                            ),
+                            maxLines: 1,
+                            minFontSize: 24,
+                            textAlign: TextAlign.center,
+                          ),
+                          // MAIN TEXT with enhanced shadows
+                          AutoSizeText(
+                            '${gameState.score}',
+                            style: TextStyle(
+                              color: hasCombo
+                                  ? _getComboColor(gameState.combo)
+                                  : Colors.white,
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                              height: 1.0,
+                              shadows: [
+                                // Multiple shadows for depth
+                                const Shadow(
+                                  color: Colors.black,
+                                  offset: Offset(2, 2),
+                                  blurRadius: 4,
+                                ),
+                                const Shadow(
+                                  color: Colors.black,
+                                  offset: Offset(-1, -1),
+                                  blurRadius: 2,
+                                ),
+                                if (hasCombo)
+                                  Shadow(
+                                    color: _getComboColor(gameState.combo),
+                                    blurRadius: 12,
+                                  ),
+                              ],
+                            ),
+                            maxLines: 1,
+                            minFontSize: 24,
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Combo Display
+                  if (hasCombo) ...[
+                    const SizedBox(height: 8),
+                    AnimatedBuilder(
+                      animation: _comboAnimationController,
+                      builder: (context, child) {
+                        return Transform.scale(
+                          scale: _comboScaleAnimation.value,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  _getComboColor(gameState.combo),
+                                  _getComboColor(gameState.combo)
+                                      .withValues(alpha: 0.8),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: Colors.white.withValues(
+                                  alpha:
+                                      0.4 + (_comboGlowAnimation.value * 0.4),
+                                ),
+                                width: 1.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _getComboColor(gameState.combo)
+                                      .withValues(
+                                    alpha:
+                                        0.4 + (_comboGlowAnimation.value * 0.4),
+                                  ),
+                                  blurRadius:
+                                      12 + (_comboGlowAnimation.value * 8),
+                                  spreadRadius:
+                                      2 + (_comboGlowAnimation.value * 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '🔥',
+                                  style: TextStyle(
+                                    fontSize:
+                                        16 + (_comboScaleAnimation.value * 2),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'COMBO',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.5,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.25),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    'x${gameState.combo}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                    // Combo Timer Progress
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 120,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: comboProgress,
+                          backgroundColor: Colors.transparent,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            _getComboColor(gameState.combo),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$movesLeft ${AppLocalizations.of(context).translate('moves_left')}',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ],
         );
       },

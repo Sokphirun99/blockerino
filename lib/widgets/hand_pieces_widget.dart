@@ -43,6 +43,10 @@ class HandPiecesWidget extends StatelessWidget {
                     child: Opacity(
                       opacity:
                           canPlace ? 1.0 : 0.5, // Grey out if can't be placed
+                      // CRITICAL FIX: Removed FittedBox wrapper to prevent visual misalignment
+                      // FittedBox with scaleDown causes the visual piece size to not match
+                      // the calculated block size used for drag coordinate calculations.
+                      // DraggablePieceWidget handles its own sizing internally.
                       child: DraggablePieceWidget(piece: piece),
                     ),
                   ),

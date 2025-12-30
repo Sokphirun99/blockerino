@@ -8,10 +8,11 @@ import '../cubits/settings/settings_state.dart';
 import '../services/app_localizations.dart';
 import '../widgets/animated_background_widget.dart';
 import 'game_screen.dart';
-import 'story_mode_screen.dart';
-import 'daily_challenge_screen.dart';
-import 'leaderboard_screen.dart';
-import 'store_screen.dart';
+// DISABLED: Hidden features
+// import 'story_mode_screen.dart';
+// import 'daily_challenge_screen.dart';
+// import 'leaderboard_screen.dart';
+// import 'store_screen.dart';
 
 class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
@@ -36,62 +37,78 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
-    
+
     return Scaffold(
+      backgroundColor: AppConfig
+          .backgroundOverlay2, // Set scaffold background to match gradient end color
       body: Stack(
         children: [
           // Animated background
           const Positioned.fill(
             child: AnimatedBackgroundWidget(),
           ),
-          
-          // Main content
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  AppConfig.backgroundOverlay1,
-                  AppConfig.backgroundOverlay2,
-                ],
+
+          // Main content with gradient overlay
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppConfig.backgroundOverlay1,
+                    AppConfig.backgroundOverlay2,
+                  ],
+                ),
               ),
-            ),
-            child: SafeArea(
-              child: SingleChildScrollView(
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: AppConfig.mainMenuVerticalPadding),
-                  child: BlocBuilder<SettingsCubit, SettingsState>(
-                    builder: (context, settingsState) {
-                      return Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                      // Spacing to replace hidden Guest Player profile section
-                      const SizedBox(height: 20),
-                      
-                      // Title
-                      Text(
-                        localizations.appName,
-                        style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                              color: AppConfig.textPrimary,
-                              fontSize: 32,
-                              letterSpacing: 2,
-                            ),
+              child: SafeArea(
+                child: Center(
+                  child: SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: MediaQuery.of(context).size.height -
+                            MediaQuery.of(context).padding.top -
+                            MediaQuery.of(context).padding.bottom -
+                            (AppConfig.mainMenuVerticalPadding * 2),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        localizations.appTagline,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppConfig.textSecondary,
-                              fontSize: 12,
-                            ),
-                      ),
-                const SizedBox(height: 12),
-                
-                // Coins Display
-                Container(
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            vertical: AppConfig.mainMenuVerticalPadding),
+                        child: BlocBuilder<SettingsCubit, SettingsState>(
+                          builder: (context, settingsState) {
+                            return Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                // Title
+                                Text(
+                                  localizations.appName,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .displayMedium
+                                      ?.copyWith(
+                                        color: AppConfig.textPrimary,
+                                        fontSize: 32,
+                                        letterSpacing: 2,
+                                      ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  localizations.appTagline,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: AppConfig.textSecondary,
+                                        fontSize: 12,
+                                      ),
+                                ),
+                                const SizedBox(height: 32),
+
+                                // DISABLED: Coins Display
+                                /*
+                                Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
@@ -123,39 +140,49 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                
-                // High Score Display
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppConfig.cardBackground,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppConfig.cardBorder),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        localizations.translate('high_score'),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppConfig.textSecondary,
-                              fontSize: 10,
-                            ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${settingsState.highScore}',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              color: AppConfig.accentColor,
-                              fontSize: 24,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                
-                // Story Mode Button (NEW!)
-                _MenuButton(
+                */
+
+                                // High Score Display
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 20, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: AppConfig.cardBackground,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border:
+                                        Border.all(color: AppConfig.cardBorder),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        localizations.translate('high_score'),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: AppConfig.textSecondary,
+                                              fontSize: 10,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${settingsState.highScore}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .headlineMedium
+                                            ?.copyWith(
+                                              color: AppConfig.accentColor,
+                                              fontSize: 24,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 40),
+
+                                // DISABLED: Story Mode Button
+                                /*
+                                _MenuButton(
                   text: '📖 ${localizations.translate('story_mode')}',
                   subtitle: localizations.translate('story_subtitle'),
                   color: const Color(0xFF9d4edd),
@@ -167,9 +194,11 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   },
                 ),
                 const SizedBox(height: 12),
-                
-                // Daily Challenge Button (NEW!)
-                _MenuButton(
+                */
+
+                                // DISABLED: Daily Challenge Button
+                                /*
+                                _MenuButton(
                   text: '⭐ ${localizations.translate('daily_challenge')}',
                   subtitle: localizations.translate('daily_subtitle'),
                   color: const Color(0xFFffd700),
@@ -181,31 +210,35 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   },
                 ),
                 const SizedBox(height: 12),
-                
-                // Classic Mode Button
-                _MenuButton(
-                  text: localizations.classicMode,
-                  subtitle: localizations.translate('classic_subtitle'),
-                  color: const Color(0xFF4ECDC4),
-                  onPressed: () {
-                    _startGame(context, GameMode.classic);
-                  },
-                ),
-                const SizedBox(height: 12),
-                
-                // Chaos Mode Button
-                _MenuButton(
-                  text: localizations.chaosMode,
-                  subtitle: localizations.translate('chaos_subtitle'),
-                  color: const Color(0xFFFF6B6B),
-                  onPressed: () {
-                    _startGame(context, GameMode.chaos);
-                  },
-                ),
-                const SizedBox(height: 12),
-                
-                // Store Button (NEW!)
-                _MenuButton(
+                */
+
+                                // Classic Mode Button
+                                _MenuButton(
+                                  text: localizations.classicMode,
+                                  subtitle: localizations
+                                      .translate('classic_subtitle'),
+                                  color: const Color(0xFF4ECDC4),
+                                  onPressed: () {
+                                    _startGame(context, GameMode.classic);
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Chaos Mode Button
+                                _MenuButton(
+                                  text: localizations.chaosMode,
+                                  subtitle:
+                                      localizations.translate('chaos_subtitle'),
+                                  color: const Color(0xFFFF6B6B),
+                                  onPressed: () {
+                                    _startGame(context, GameMode.chaos);
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+
+                                // DISABLED: Store Button
+                                /*
+                                _MenuButton(
                   text: '🏪 ${localizations.translate('store')}',
                   subtitle: localizations.translate('store_subtitle'),
                   color: const Color(0xFF06b6d4),
@@ -217,9 +250,11 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   },
                 ),
                 const SizedBox(height: 12),
-                
-                // High Scores Button
-                TextButton(
+                */
+
+                                // DISABLED: Leaderboard Button
+                                /*
+                                TextButton(
                   onPressed: () {
                     Navigator.push(
                       context,
@@ -235,10 +270,11 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                
-                // DISABLED: Settings button (not yet ready for use)
-                /*
-                _MenuButton(
+                */
+
+                                // DISABLED: Settings button (not yet ready for use)
+                                /*
+                                _MenuButton(
                   text: localizations.translate('settings'),
                   icon: Icons.settings,
                   onPressed: () {
@@ -255,16 +291,19 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   ),
                 ),
                 */
-                
-                const SizedBox(height: 40),
-                      ],
-                    ); // Column
-                    }, // BlocBuilder builder
-                  ), // BlocBuilder
-                ), // Container
-              ), // SingleChildScrollView
-            ), // SafeArea
-          ), // Container
+
+                                const SizedBox(height: 40),
+                              ],
+                            ); // Column
+                          }, // BlocBuilder builder
+                        ), // BlocBuilder
+                      ), // Container
+                    ), // ConstrainedBox
+                  ), // SingleChildScrollView
+                ), // Center
+              ), // SafeArea
+            ), // Container
+          ), // Positioned.fill
         ], // Stack children
       ), // Stack
     ); // Scaffold
@@ -272,7 +311,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
 
   void _startGame(BuildContext context, GameMode mode) {
     final gameCubit = context.read<GameCubit>();
-    
+
     // Always call startGame - it will auto-resume if there's a saved game for this mode
     gameCubit.startGame(mode);
     Navigator.push(

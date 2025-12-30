@@ -7,7 +7,7 @@ import '../../models/story_level.dart';
 /// Base class for all game states
 abstract class GameState extends Equatable {
   const GameState();
-  
+
   @override
   List<Object?> get props => [];
 }
@@ -26,18 +26,20 @@ class GameInProgress extends GameState {
   final int lastBrokenLine;
   final GameMode gameMode;
   final bool showInvalidPreview;
-  
+
   // Hover preview for ghost piece
   final Piece? hoverPiece;
   final int? hoverX;
   final int? hoverY;
   final bool? hoverValid;
-  
+
   // Story mode specific fields
   final StoryLevel? storyLevel;
   final int linesCleared;
   final int timeRemaining; // in seconds, -1 = no limit
   final bool powerUpsDisabled;
+  final DateTime?
+      levelEndTime; // Exact end time for story mode (prevents timer cheating)
 
   const GameInProgress({
     required this.board,
@@ -55,6 +57,7 @@ class GameInProgress extends GameState {
     this.linesCleared = 0,
     this.timeRemaining = -1,
     this.powerUpsDisabled = false,
+    this.levelEndTime,
   });
 
   @override
@@ -74,6 +77,7 @@ class GameInProgress extends GameState {
         linesCleared,
         timeRemaining,
         powerUpsDisabled,
+        levelEndTime,
       ];
 
   GameInProgress copyWith({
@@ -92,6 +96,7 @@ class GameInProgress extends GameState {
     int? linesCleared,
     int? timeRemaining,
     bool? powerUpsDisabled,
+    DateTime? levelEndTime,
   }) {
     return GameInProgress(
       board: board ?? this.board,
@@ -109,6 +114,7 @@ class GameInProgress extends GameState {
       linesCleared: linesCleared ?? this.linesCleared,
       timeRemaining: timeRemaining ?? this.timeRemaining,
       powerUpsDisabled: powerUpsDisabled ?? this.powerUpsDisabled,
+      levelEndTime: levelEndTime ?? this.levelEndTime,
     );
   }
 }
@@ -132,7 +138,8 @@ class GameOver extends GameState {
   });
 
   @override
-  List<Object?> get props => [board, finalScore, gameMode, storyLevel, starsEarned, levelCompleted];
+  List<Object?> get props =>
+      [board, finalScore, gameMode, storyLevel, starsEarned, levelCompleted];
 }
 
 /// State when loading a saved game

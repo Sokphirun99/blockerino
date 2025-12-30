@@ -53,14 +53,15 @@ enum HapticFeedbackType {
   error,
 }
 
-/// Fat Finger fix: Calculate responsive Y offset based on screen size
+/// Fat Finger fix: Calculate responsive Y offset to make piece float above finger
 /// Uses ScreenUtil for consistent scaling across all devices and aspect ratios
 /// This ensures the piece is always visible above the finger on phones, tablets, and foldables
+/// Returns a positive value representing how many pixels the piece should float above the finger
 double _getDragYOffset(BuildContext context) {
-  // Use ScreenUtil for responsive sizing - 40 logical pixels that scale correctly
+  // Use ScreenUtil for responsive sizing - 50 logical pixels that scale correctly
   // ScreenUtil handles device pixel ratio and aspect ratio automatically
-  final offset = 40.0.sp; // Scaled pixels that adapt to screen size
-  return -offset;
+  // Increased from 40 to 50 for better visibility (like Block Blast, Candy Crush)
+  return 50.0.sp; // Scaled pixels that adapt to screen size
 }
 
 class DraggablePieceWidget extends StatefulWidget {
@@ -92,6 +93,8 @@ class _DraggablePieceWidgetState extends State<DraggablePieceWidget>
 
   @override
   void dispose() {
+    _isDragging =
+        false; // Reset state to prevent stale state on widget recreation
     _scaleController.dispose();
     super.dispose();
   }
@@ -114,15 +117,26 @@ class _DraggablePieceWidgetState extends State<DraggablePieceWidget>
       maxSimultaneousDrags: 1,
       hitTestBehavior: HitTestBehavior.opaque, // Makes entire area tappable
       dragAnchorStrategy: (draggable, context, position) {
-        // This makes the piece center on the finger with Y offset for visibility
-        // For even-sized pieces, we need to offset by 0.5 block size to align with grid
-        final widthOffset = (widget.piece.width % 2 == 0) ? 0.5 : 0.0;
-        final heightOffset = (widget.piece.height % 2 == 0) ? 0.5 : 0.0;
-        final dragYOffset = _getDragYOffset(context);
+        // Fat Finger fix: Make piece float ABOVE finger for better visibility
+        // The anchor point determines where the finger "grabs" the piece
+        // A larger anchor Y offset means the piece appears higher above the finger
+        //
+        // BUG FIX: The original code used (centerY - dragYOffset) which made the piece
+        // appear BELOW the finger (negative offset = anchor above piece = piece below finger)
+        // Fixed to use (centerY + dragYOffset) so piece floats ABOVE the finger
+        //
+        // Even-sized piece alignment: subtract 0.5 to align with grid intersections
+        final widthOffset = (widget.piece.width % 2 == 0) ? -0.5 : 0.0;
+        final heightOffset = (widget.piece.height % 2 == 0) ? -0.5 : 0.0;
+        final dragYOffset =
+            _getDragYOffset(context); // Positive value (e.g., 50.0.sp)
 
+        // Return offset from piece top-left to anchor point (finger position)
+        // X: piece center (horizontal alignment)
+        // Y: piece center PLUS Y offset (anchor is below piece center, so piece appears ABOVE finger)
         return Offset(
             (widget.piece.width / 2 + widthOffset) * feedbackBlockSize,
-            (widget.piece.height / 2 + heightOffset) * feedbackBlockSize -
+            (widget.piece.height / 2 + heightOffset) * feedbackBlockSize +
                 dragYOffset);
       },
       feedback: Transform.scale(
@@ -190,12 +204,15 @@ class _DraggablePieceWidgetState extends State<DraggablePieceWidget>
       },
       onDragEnd: (details) {
         setState(() => _isDragging = false);
-        // Bounce effect: scale down then back up
-        _scaleController.reverse().then((_) {
-          if (mounted) {
-            _scaleController.value = 0;
-          }
-        });
+        // BUG FIX #1: Check mounted before starting animation to prevent memory leak
+        if (mounted) {
+          // Bounce effect: scale down then back up
+          _scaleController.reverse().then((_) {
+            if (mounted) {
+              _scaleController.value = 0;
+            }
+          });
+        }
 
         final settings = context.read<SettingsCubit>().state;
         if (settings.hapticsEnabled) {
@@ -313,45 +330,58 @@ class _BoardDragTargetState extends State<BoardDragTarget> {
     final fallbackRenderBox = context.findRenderObject() as RenderBox?;
     final renderBox = gridRenderBox ?? fallbackRenderBox;
 
-    if (renderBox == null) return null;
+    // BUG FIX #5: Add debug logging for null renderBox
+    if (renderBox == null) {
+      debugPrint('WARNING: Cannot calculate grid position - renderBox is null');
+      return null;
+    }
 
     // 2. Convert Global Drop Coordinate to Local Grid Coordinate
-    // globalOffset (details.offset) is the Top-Left corner of the piece visual
+    // CRITICAL FIX: details.offset represents the top-left corner of the dragged piece (visual feedback)
+    // NOT the anchor point. The dragAnchorStrategy sets where the anchor is relative to the feedback widget,
+    // but details.offset gives us the global position of the feedback widget's top-left corner.
     final localPosition = renderBox.globalToLocal(globalOffset);
 
     final board = currentState.board;
-    final blockSize = AppConfig.getBlockSize(context, board.size);
+    // CRITICAL FIX: Use cell size (effectiveSize / gridSize) for grid coordinate calculation
+    // This matches exactly how the ghost preview calculates positions
+    // The effectiveSize accounts for border + padding, and cell size matches Expanded widget division
+    final effectiveSize = AppConfig.getEffectiveSize(context);
+    final cellSize = effectiveSize /
+        board.size; // Full cell size (matches Expanded division)
 
+    // details.offset is already the top-left corner of the feedback widget
+    // So we can use it directly after converting to local coordinates
     double adjustedX = localPosition.dx;
     double adjustedY = localPosition.dy;
 
-    // 3. Fallback padding correction
-    // Only applied if we couldn't get the inner grid widget directly
+    // 3. Padding correction only needed if using fallback render box
+    // When using gridRenderBox, we're already inside the padding, so no correction needed
     if (gridRenderBox == null) {
-      adjustedX -= AppConfig.boardContainerPadding;
-      adjustedY -= AppConfig.boardContainerPadding;
+      // Fallback: subtract border and padding to get position relative to grid
+      // Border (2.0 * 2) + Padding (4.0 * 2) = 12.0
+      adjustedX -= AppConfig.boardContainerPadding + AppConfig.boardBorderWidth;
+      adjustedY -= AppConfig.boardContainerPadding + AppConfig.boardBorderWidth;
     }
 
-    // 4. CRITICAL FIX: Removed the extra offsets
-    // Previous code subtracted (width/2) and (height/2) here.
-    // That is NOT needed because 'adjustedX/Y' is already the Top-Left
-    // of the piece (because globalOffset is the Top-Left of the feedback).
+    // 4. Compensate for the "Fat Finger" offset from dragAnchorStrategy
+    // The dragAnchorStrategy shifts the visual piece ABOVE the finger by dragYOffset
+    // The visual feedback shows the piece higher than the finger position
+    // To place the piece where it VISUALLY appears, we need to add the offset back
+    // This ensures: what you see is where the piece lands
+    final dragYOffset = _getDragYOffset(context);
+    adjustedY += dragYOffset;
 
-    // Previous code also modified adjustedY based on dragYOffset.
-    // That is also NOT needed because the user aligns the *visual* piece
-    // with the grid. If the visual matches the grid, the coordinates match.
-
-    // 5. Calculate Grid Coordinates
+    // 5. Calculate Grid Coordinates using full cell size
     // Using round() instead of floor() provides a better "magnetic" snap feel
     // when the piece is slightly off-center.
-    final gridX = (adjustedX / blockSize).round();
-    final gridY = (adjustedY / blockSize).round();
+    final gridX = (adjustedX / cellSize).round();
+    final gridY = (adjustedY / cellSize).round();
 
-    // 6. Validate Bounds
-    // Allow -1 for lenient edge detection (clamped later by logic)
-    if (gridX < -1 || gridY < -1) return null;
-    if (gridX + piece.width > board.size + 1 ||
-        gridY + piece.height > board.size + 1) {
+    // BUG FIX #3: Strict validation - reject negative coordinates and out-of-bounds
+    // No clamping or lenient edge detection - coordinates must be valid
+    if (gridX < 0 || gridY < 0) return null;
+    if (gridX + piece.width > board.size || gridY + piece.height > board.size) {
       return null;
     }
 
@@ -396,8 +426,12 @@ class _BoardDragTargetState extends State<BoardDragTarget> {
           return;
         }
 
-        // Validate placement one more time with current board state
-        if (!currentState.board.canPlacePiece(piece, gridX, gridY)) {
+        // BUG FIX #6: Additional bounds validation with current board state
+        // Protects against race conditions where board size changed
+        if (gridX < 0 ||
+            gridY < 0 ||
+            gridX + piece.width > currentState.board.size ||
+            gridY + piece.height > currentState.board.size) {
           gameCubit.clearHoverBlocks();
           _lastGridX = -1;
           _lastGridY = -1;
@@ -405,6 +439,19 @@ class _BoardDragTargetState extends State<BoardDragTarget> {
             _intelligentHaptic(HapticFeedbackType.error);
           }
           return;
+        }
+
+        // CRITICAL FIX: Validate placement one more time with current board state
+        // This prevents race conditions where board size or state changed between
+        // position calculation and placement (e.g., mode switch, piece placement, etc.)
+        if (!currentState.board.canPlacePiece(piece, gridX, gridY)) {
+          gameCubit.clearHoverBlocks();
+          _lastGridX = -1;
+          _lastGridY = -1;
+          if (settings.hapticsEnabled) {
+            _intelligentHaptic(HapticFeedbackType.error);
+          }
+          return; // Reject placement
         }
 
         // #region agent log
@@ -453,25 +500,47 @@ class _BoardDragTargetState extends State<BoardDragTarget> {
         final gridX = gridPos.gridX;
         final gridY = gridPos.gridY;
 
+        // OPTIMIZATION: Validate bounds BEFORE calling showHoverPreview
+        // This prevents unnecessary state emissions when moving between invalid positions
+        final currentState = gameCubit.state;
+        if (currentState is! GameInProgress) {
+          if (_lastGridX != -1 || _lastGridY != -1) {
+            gameCubit.clearHoverBlocks();
+            _lastGridX = -1;
+            _lastGridY = -1;
+          }
+          return;
+        }
+
+        // Validate bounds immediately - don't call showHoverPreview for invalid positions
+        if (gridX < 0 ||
+            gridY < 0 ||
+            gridX + piece.width > currentState.board.size ||
+            gridY + piece.height > currentState.board.size) {
+          // Out of bounds - clear hover if we had one
+          if (_lastGridX != -1 || _lastGridY != -1) {
+            gameCubit.clearHoverBlocks();
+            _lastGridX = -1;
+            _lastGridY = -1;
+          }
+          return; // Don't call showHoverPreview for invalid positions
+        }
+
         // Only update if position changed (prevents unnecessary rebuilds)
         if (gridX != _lastGridX || gridY != _lastGridY) {
-          // OPTIMIZATION: Removed redundant canPlacePiece check here
-          // showHoverPreview already validates the position internally
-          // This eliminates duplicate expensive collision detection calls
+          // Now call showHoverPreview only for valid grid positions
+          // OPTIMIZATION: showHoverPreview validates placement internally
           gameCubit.showHoverPreview(piece, gridX, gridY);
-          
+
           // Haptic feedback when entering a new valid spot
-          final currentState = gameCubit.state;
-          if (currentState is GameInProgress) {
-            final settings = context.read<SettingsCubit>().state;
-            if (settings.hapticsEnabled && 
-                currentState.hoverValid == true &&
-                (_lastGridX == -1 || _lastGridY == -1)) {
-              // Only vibrate when entering a new valid spot for the first time
-              _intelligentHaptic(HapticFeedbackType.hoverValid);
-            }
+          final settings = context.read<SettingsCubit>().state;
+          if (settings.hapticsEnabled &&
+              currentState.hoverValid == true &&
+              (_lastGridX == -1 || _lastGridY == -1)) {
+            // Only vibrate when entering a new valid spot for the first time
+            _intelligentHaptic(HapticFeedbackType.hoverValid);
           }
-          
+
           // Track last position for change detection
           _lastGridX = gridX;
           _lastGridY = gridY;
