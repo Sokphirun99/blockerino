@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:vibration/vibration.dart';
 import 'package:confetti/confetti.dart';
@@ -28,7 +27,6 @@ import '../widgets/floating_score_overlay.dart';
 import '../widgets/loading_screen_widget.dart';
 import '../widgets/banner_ad_widget.dart';
 import '../widgets/screen_flash.dart';
-import '../widgets/combo_counter.dart';
 import '../widgets/floating_score.dart';
 import '../widgets/perfect_clear_celebration.dart';
 import '../services/admob_service.dart';
@@ -349,11 +347,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   void _checkAchievements(int lineCount, int combo) {
-    // BUG FIX: Reset lastComboLevel when combo resets to 0
-    // This allows combo milestone messages to show again after combo breaks
+    // Track combo level for milestone detection
     if (combo == 0) {
       _lastComboLevel = 0;
-      return; // No combo achievements to check
+      return;
     }
 
     String? message;
@@ -365,13 +362,15 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       message = '⚡ TRIPLE CLEAR! ⚡';
     }
 
-    // Check for combo milestones
+    // Check for combo milestones - use celebratory text (not "COMBO x#")
+    // ComboCounter widget shows the actual combo number
+    // Achievement shows the milestone celebration
     if (combo >= 20 && _lastComboLevel < 20) {
-      message = '🌟 MEGA COMBO x$combo! 🌟';
+      message = '🌟 LEGENDARY! 🌟';
     } else if (combo >= 10 && _lastComboLevel < 10) {
-      message = '✨ SUPER COMBO x$combo! ✨';
+      message = '✨ UNSTOPPABLE! ✨';
     } else if (combo >= 5 && _lastComboLevel < 5) {
-      message = '💫 COMBO x$combo! 💫';
+      message = '💫 ON FIRE! 💫';
     }
 
     _lastComboLevel = combo;
@@ -795,19 +794,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         Color(0xFFFFD700),
                         Color(0xFF52b788),
                       ],
-                    ),
-                  ),
-
-                  // Combo counter display
-                  Positioned(
-                    top: 100,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: ComboCounter(
-                        combo: gameState is GameInProgress ? gameState.combo : 0,
-                        isActive: gameState is GameInProgress && gameState.combo >= 2,
-                      ),
                     ),
                   ),
 

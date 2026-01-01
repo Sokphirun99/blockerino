@@ -10,6 +10,8 @@ import '../../models/game_mode.dart';
 import '../../models/story_level.dart';
 import '../../models/power_up.dart';
 import '../../services/sound_service.dart';
+import '../../services/mission_service.dart';
+import '../../models/daily_mission.dart';
 import '../settings/settings_cubit.dart';
 import 'game_state.dart';
 
@@ -61,6 +63,11 @@ class GameCubit extends Cubit<GameState> {
   int _moveCount = 0;
   bool _doublePointsActive = false;
   int _doublePointsLeft = 0;
+
+  // Mission tracking
+  int _perfectClearCount = 0;
+  int _maxComboReached = 0;
+  final MissionService _missionService = MissionService();
 
   // Story mode timer
   Timer? _storyTimer;
@@ -154,7 +161,6 @@ class GameCubit extends Cubit<GameState> {
 
     // BUG FIX #7: If mode is story but no level provided, reset to initial state
     if (mode == GameMode.story) {
-      debugPrint('Error: Story Mode started without a level');
       emit(
           const GameInitial()); // Reset to initial state instead of leaving inconsistent
       return;
@@ -162,15 +168,14 @@ class GameCubit extends Cubit<GameState> {
 
     // Check if this mode has a saved game (and we're not in GameOver state)
     if (_savedGames.containsKey(mode) && currentState is! GameOver) {
-      debugPrint('Loading saved game for $mode');
       _loadSavedGame(mode);
     } else {
-      debugPrint('No saved game found for $mode, starting fresh game');
       // Start fresh game
       _pieceBag.clear(); // Reset bag for new game
       _bagIndex = 0;
       _bagRefillCount =
           0; // CRITICAL FIX: Reset refill count for consistent rotation pattern
+      _resetMissionTracking(); // Reset mission tracking for new game
 
       final config = GameModeConfig.fromMode(mode);
       final board = Board(size: config.boardSize);
@@ -195,6 +200,7 @@ class GameCubit extends Cubit<GameState> {
     _bagIndex = 0;
     _bagRefillCount =
         0; // CRITICAL FIX: Reset refill count for consistent rotation pattern
+    _resetMissionTracking(); // Reset mission tracking for new game
 
     // FIX: Use the story level's game mode, not hardcoded GameMode.story
     // Some story levels use GameMode.chaos or other modes
@@ -579,6 +585,7 @@ class GameCubit extends Cubit<GameState> {
         hoverY: null,
         hoverValid: null,
       ));
+
       return false;
     }
 
@@ -598,8 +605,15 @@ class GameCubit extends Cubit<GameState> {
 
     // CRITICAL FIX: Break lines on the NEW board, not the old one!
     // This ensures hover blocks are cleared and line breaking works correctly
+    final lineClearSw = Stopwatch()..start();
     final clearResult = newBoard.breakLinesWithInfo();
     final linesBroken = clearResult.lineCount;
+    lineClearSw.stop();
+
+    // TODO: REMOVE PERFORMANCE MONITORING IN PRODUCTION
+    if (linesBroken > 0) {
+      debugPrint('⏱️ Line clearing: ${lineClearSw.elapsedMilliseconds}ms');
+    }
 
     // Track lines cleared for story mode
     int newLinesCleared = currentState.linesCleared + linesBroken;
@@ -613,8 +627,14 @@ class GameCubit extends Cubit<GameState> {
 
       // ========== FIBONACCI-BASED EXPONENTIAL SCORING ==========
       // Combo multiplier uses Fibonacci sequence for exponentially rewarding combos
-      const fibMultipliers = [1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144];
-      final comboIndex = math.min(newCombo, 10);
+      // CRITICAL FIX: Use comboIndex-1 to align with 1-based combo numbering
+      // Combo 1 → index 0 (multiplier 1)
+      // Combo 2 → index 1 (multiplier 1)
+      // Combo 3 → index 2 (multiplier 2)
+      // Combo 4 → index 3 (multiplier 3)
+      const fibMultipliers = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144];
+      final comboIndex =
+          (newCombo - 1).clamp(0, 11); // Convert 1-based combo to 0-based index
       final comboMultiplier = fibMultipliers[comboIndex];
 
       // Multi-line bonus: Reward clearing multiple lines at once
@@ -636,22 +656,23 @@ class GameCubit extends Cubit<GameState> {
       // Apply Chaos event multiplier
       if (_doublePointsActive) {
         finalPoints *= 2;
-        debugPrint('   🎲 2X multiplier applied!');
       }
 
       newScore += finalPoints;
-
-      debugPrint('💰 Combo $newCombo: base=$basePoints, mult=×$comboMultiplier, lines=×$multiLineBonus → +$finalPoints pts');
 
       // Check for perfect clear (board completely empty after clearing lines)
       if (_isBoardEmpty(newBoard)) {
         final perfectClearBonus = 1000 + (newCombo * 100);
         newScore += perfectClearBonus;
-
-        debugPrint('🎉 PERFECT CLEAR! Bonus: +$perfectClearBonus points!');
+        _perfectClearCount++; // Track for missions
 
         // Optional: track for analytics
         // settingsCubit?.analyticsService.logPerfectClear(newScore, newCombo);
+      }
+
+      // Track max combo for missions
+      if (newCombo > _maxComboReached) {
+        _maxComboReached = newCombo;
       }
 
       // Play clear and combo sounds
@@ -737,6 +758,18 @@ class GameCubit extends Cubit<GameState> {
       _soundService.stopBGM();
       _soundService.playGameOver();
       settingsCubit?.updateHighScore(newScore);
+
+      // Track mission progress
+      _trackMissionProgress(
+        gameMode: currentState.gameMode,
+        finalScore: newScore,
+        linesCleared: newLinesCleared,
+        maxCombo: _maxComboReached,
+        perfectClears: _perfectClearCount,
+      );
+
+      // Reset tracking for next game
+      _resetMissionTracking();
 
       emit(GameOver(
         board: newBoard, // FIX: Use the modified board with placed piece
@@ -865,6 +898,16 @@ class GameCubit extends Cubit<GameState> {
       _soundService.playGameOver();
     }
 
+    // Track mission progress for story mode games too
+    _trackMissionProgress(
+      gameMode: currentState.gameMode,
+      finalScore: score,
+      linesCleared: currentState.linesCleared,
+      maxCombo: _maxComboReached,
+      perfectClears: _perfectClearCount,
+    );
+    _resetMissionTracking();
+
     // BUG FIX #1: Use currentState.gameMode instead of hardcoded GameMode.story
     // Story levels can use different game modes (chaos, classic, etc.)
     emit(GameOver(
@@ -878,6 +921,60 @@ class GameCubit extends Cubit<GameState> {
 
     // Reset flag after emitting (in case of future reuse)
     _isEndingStoryLevel = false;
+  }
+
+  // ========== Mission Tracking ==========
+
+  /// Track mission progress when game ends
+  Future<void> _trackMissionProgress({
+    required GameMode gameMode,
+    required int finalScore,
+    required int linesCleared,
+    required int maxCombo,
+    required int perfectClears,
+  }) async {
+    try {
+      // Track games played
+      await _missionService.addMissionProgress(MissionType.playGames, 1);
+
+      // Track lines cleared
+      if (linesCleared > 0) {
+        await _missionService.addMissionProgress(
+            MissionType.clearLines, linesCleared);
+      }
+
+      // Track high score
+      if (finalScore > 0) {
+        await _missionService.trackHighScore(finalScore);
+      }
+
+      // Track max combo
+      if (maxCombo > 0) {
+        await _missionService.trackMaxCombo(maxCombo);
+      }
+
+      // Track perfect clears
+      if (perfectClears > 0) {
+        await _missionService.addMissionProgress(
+            MissionType.perfectClears, perfectClears);
+      }
+
+      // Track chaos mode games
+      if (gameMode == GameMode.chaos) {
+        await _missionService.addMissionProgress(MissionType.useChaosMode, 1);
+      }
+
+      debugPrint(
+          '📊 Mission progress tracked: score=$finalScore, lines=$linesCleared, combo=$maxCombo, perfects=$perfectClears');
+    } catch (e) {
+      debugPrint('❌ Error tracking missions: $e');
+    }
+  }
+
+  /// Reset mission tracking variables for new game
+  void _resetMissionTracking() {
+    _perfectClearCount = 0;
+    _maxComboReached = 0;
   }
 
   // ========== Chaos Mode Events ==========
@@ -910,6 +1007,10 @@ class GameCubit extends Cubit<GameState> {
       _doublePointsLeft = 5;
 
       debugPrint('🎲 CHAOS EVENT: 2X POINTS FOR 5 MOVES!');
+
+      // TODO: REMOVE DEBUG LOGGING BEFORE RELEASE
+      debugPrint('🎲 Event triggered: 2X POINTS');
+
       // TODO: Show UI notification to player
     }
   }
@@ -1178,37 +1279,50 @@ class GameCubit extends Cubit<GameState> {
         easyCount = 70;
         mediumCount = 25;
         hardCount = 5;
-        debugPrint('🆘 MERCY MODE: Board $densityPercent% full - Easy: $easyCount%, Medium: $mediumCount%, Hard: $hardCount%');
       } else if (density > 0.60) {
         // CROWDED
         easyCount = 60;
         mediumCount = 30;
         hardCount = 10;
-        debugPrint('⚠️ CROWDED: Board $densityPercent% full - Easy: $easyCount%, Medium: $mediumCount%, Hard: $hardCount%');
       } else if (density > 0.40) {
         // BALANCED
         easyCount = 50;
         mediumCount = 35;
         hardCount = 15;
-        debugPrint('✅ BALANCED: Board $densityPercent% full - Easy: $easyCount%, Medium: $mediumCount%, Hard: $hardCount%');
       } else {
         // EMPTY - plenty of space, can give harder pieces
         easyCount = 45;
         mediumCount = 35;
         hardCount = 20;
-        debugPrint('🟢 EMPTY: Board $densityPercent% full - Easy: $easyCount%, Medium: $mediumCount%, Hard: $hardCount%');
+        debugPrint(
+            '🟢 EMPTY: Board $densityPercent% full - Easy: $easyCount%, Medium: $mediumCount%, Hard: $hardCount%');
       }
     } else {
-      debugPrint('📦 Default distribution (no active game) - Easy: $easyCount%, Medium: $mediumCount%, Hard: $hardCount%');
+      // No active game - use default distribution
     }
 
     // ========== FILL BAG WITH ADAPTIVE DISTRIBUTION ==========
+    if (currentState is GameInProgress) {
+      final board = currentState.board;
+      final boardSize = currentState.gameMode == GameMode.chaos ? 100 : 64;
+      int filledCells = 0;
+      for (int row = 0; row < board.size; row++) {
+        for (int col = 0; col < board.size; col++) {
+          if (board.grid[row][col].type == BlockType.filled) {
+            filledCells++;
+          }
+        }
+      }
+      final density = filledCells / boardSize;
+      debugPrint('   Density: ${(density * 100).toStringAsFixed(1)}%');
+    }
 
     // Easy pieces (Singles, Doubles, Triples): 20, 21, 22, 23, 24
     // Distribute evenly among 5 easy piece types
     final easyPieces = [20, 21, 22, 23, 24];
     final easyPerPiece = easyCount ~/ easyPieces.length; // Base count per piece
-    final easyRemainder = easyCount % easyPieces.length; // Extra pieces to distribute
+    final easyRemainder =
+        easyCount % easyPieces.length; // Extra pieces to distribute
     for (int i = 0; i < easyPerPiece; i++) {
       _pieceBag.addAll(easyPieces);
     }
@@ -1234,7 +1348,8 @@ class GameCubit extends Cubit<GameState> {
     // Distribute evenly among 6 hard piece types
     final hardPieces = [16, 17, 18, 19, 25, 26];
     final hardPerPiece = hardCount ~/ hardPieces.length; // Base count per piece
-    final hardRemainder = hardCount % hardPieces.length; // Extra pieces to distribute
+    final hardRemainder =
+        hardCount % hardPieces.length; // Extra pieces to distribute
     for (int i = 0; i < hardPerPiece; i++) {
       _pieceBag.addAll(hardPieces);
     }
@@ -1244,7 +1359,8 @@ class GameCubit extends Cubit<GameState> {
       _pieceBag.add(hardPieces[(hardStartIndex + i) % hardPieces.length]);
     }
 
-    debugPrint('📦 Bag refilled: ${_pieceBag.length} pieces (E:$easyCount M:$mediumCount H:$hardCount)');
+    debugPrint(
+        '📦 Bag refilled: ${_pieceBag.length} pieces (E:$easyCount M:$mediumCount H:$hardCount)');
 
     // Fisher-Yates shuffle with proper RNG
     final rng = math.Random();
