@@ -28,6 +28,7 @@ import '../widgets/floating_score_overlay.dart';
 import '../widgets/loading_screen_widget.dart';
 import '../widgets/banner_ad_widget.dart';
 import '../widgets/screen_flash.dart';
+import '../widgets/combo_counter.dart';
 import '../services/admob_service.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
@@ -705,6 +706,19 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         Color(0xFFFFD700),
                         Color(0xFF52b788),
                       ],
+                    ),
+                  ),
+
+                  // Combo counter display
+                  Positioned(
+                    top: 100,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: ComboCounter(
+                        combo: gameState is GameInProgress ? gameState.combo : 0,
+                        isActive: gameState is GameInProgress && gameState.combo >= 2,
+                      ),
                     ),
                   ),
 
