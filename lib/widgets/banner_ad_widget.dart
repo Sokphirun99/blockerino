@@ -4,6 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../services/admob_service.dart';
 
+/// Debug print helper - only prints in debug mode
+void _log(String message) {
+  if (kDebugMode) {
+    debugPrint(message);
+  }
+}
+
 /// Widget that displays a banner ad at the bottom of the screen
 class BannerAdWidget extends StatefulWidget {
   final AdMobService adService;
@@ -34,15 +41,15 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
   @override
   void initState() {
     super.initState();
-    debugPrint('🎯 BannerAdWidget: initState() called');
-    debugPrint('🎯 BannerAdWidget: Widget is being created');
+    _log('🎯 BannerAdWidget: initState() called');
+    _log('🎯 BannerAdWidget: Widget is being created');
     // Wait a bit for AdMob to be fully initialized
     _initTimer = Timer(const Duration(milliseconds: 500), () {
       if (mounted) {
-        debugPrint('🎯 BannerAdWidget: Starting to load ad after delay');
+        _log('🎯 BannerAdWidget: Starting to load ad after delay');
         _loadAd();
       } else {
-        debugPrint('⚠️ BannerAdWidget: Widget not mounted, skipping ad load');
+        _log('⚠️ BannerAdWidget: Widget not mounted, skipping ad load');
       }
     });
   }
@@ -61,7 +68,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
     _retryTimer?.cancel();
     _loadingTimer?.cancel();
 
-    debugPrint('🎯 BannerAdWidget: Loading ad... (attempt ${_retryCount + 1})');
+    _log('🎯 BannerAdWidget: Loading ad... (attempt ${_retryCount + 1})');
     setState(() {
       _isLoading = true;
       _errorMessage = null; // Clear previous error when retrying
@@ -71,7 +78,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
     await widget.adService.loadBannerAd(
       adSize: widget.adSize ?? AdSize.banner,
       onAdLoaded: (_) {
-        debugPrint('✅ BannerAdWidget: Ad loaded successfully!');
+        _log('✅ BannerAdWidget: Ad loaded successfully!');
         if (mounted) {
           setState(() {
             _adLoaded = true;
@@ -80,19 +87,18 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
         }
       },
       onAdFailedToLoad: (error) {
-        debugPrint('❌ BannerAdWidget: Ad failed to load: $error');
-        debugPrint('   Error code: ${error.code}');
-        debugPrint('   Error message: ${error.message}');
-        debugPrint('   Error domain: ${error.domain}');
-        debugPrint('   Retry count: $_retryCount');
+        _log('❌ BannerAdWidget: Ad failed to load: $error');
+        _log('   Error code: ${error.code}');
+        _log('   Error message: ${error.message}');
+        _log('   Error domain: ${error.domain}');
+        _log('   Retry count: $_retryCount');
 
         // Retry on network errors (code 2) or no fill errors (code 3)
         if (mounted &&
             _retryCount < _maxRetries &&
             (error.code == 2 || error.code == 3)) {
           _retryCount++;
-          debugPrint(
-              '🔄 BannerAdWidget: Retrying ad load (attempt $_retryCount/$_maxRetries)...');
+          _log('🔄 BannerAdWidget: Retrying ad load (attempt $_retryCount/$_maxRetries)...');
           // Wait a bit before retrying (exponential backoff)
           // ✅ Use Timer instead of Future.delayed so it can be cancelled
           _retryTimer = Timer(Duration(seconds: _retryCount * 2), () {

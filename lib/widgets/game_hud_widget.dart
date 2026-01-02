@@ -170,14 +170,18 @@ class _GameHudWidgetState extends State<GameHudWidget>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.timer, color: Colors.white, size: 16),
+                      const Icon(Icons.timer, color: Colors.white, size: 14),
                       const SizedBox(width: 4),
-                      Text(
-                        _formatTime(gameState.timeRemaining),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                      Flexible(
+                        child: Text(
+                          _formatTime(gameState.timeRemaining),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -289,27 +293,31 @@ class _GameHudWidgetState extends State<GameHudWidget>
                 children: [
                   // High Score Indicator (if new high score)
                   if (isNewHighScore) ...[
-                    Row(
+                    const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.emoji_events,
                           color: Color(0xFFFFE66D),
-                          size: 14,
+                          size: 12,
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'NEW BEST!',
-                          style: TextStyle(
-                            color: const Color(0xFFFFE66D),
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
+                        SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            'NEW BEST!',
+                            style: TextStyle(
+                              color: Color(0xFFFFE66D),
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                   ],
 
                   // Score Label
@@ -436,23 +444,27 @@ class _GameHudWidgetState extends State<GameHudWidget>
                                   '🔥',
                                   style: TextStyle(
                                     fontSize:
-                                        16 + (_comboScaleAnimation.value * 2),
+                                        14 + (_comboScaleAnimation.value * 2),
                                   ),
                                 ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'COMBO',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.5,
+                                const SizedBox(width: 4),
+                                const Flexible(
+                                  child: Text(
+                                    'COMBO',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 4),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 2),
+                                      horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: Colors.white.withValues(alpha: 0.25),
                                     borderRadius: BorderRadius.circular(12),
@@ -461,7 +473,7 @@ class _GameHudWidgetState extends State<GameHudWidget>
                                     'x${gameState.combo}',
                                     style: const TextStyle(
                                       color: Colors.white,
-                                      fontSize: 14,
+                                      fontSize: 12,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),

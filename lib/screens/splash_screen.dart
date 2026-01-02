@@ -1,8 +1,16 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../services/sound_service.dart';
 import '../services/mission_service.dart';
 import '../services/streak_service.dart';
 import 'main_menu_screen.dart';
+
+/// Debug print helper - only prints in debug mode
+void _log(String message) {
+  if (kDebugMode) {
+    debugPrint(message);
+  }
+}
 
 /// Professional splash screen with animated logo and app initialization
 class SplashScreen extends StatefulWidget {
@@ -74,7 +82,7 @@ class _SplashScreenState extends State<SplashScreen>
         );
       }
     } catch (e) {
-      debugPrint('❌ Error during app initialization: $e');
+      _log('❌ Error during app initialization: $e');
       
       // Still navigate on error after minimum duration
       await Future.delayed(const Duration(seconds: 2));
@@ -90,7 +98,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   /// Perform actual service initialization
   Future<void> _performInitialization() async {
-    debugPrint('🚀 Initializing app services...');
+    _log('🚀 Initializing app services...');
 
     // Initialize core services
     await Future.wait([
@@ -106,7 +114,7 @@ class _SplashScreenState extends State<SplashScreen>
     missionService.getDailyMissions();
     streakService.getStreak();
 
-    debugPrint('✅ App services initialized successfully');
+    _log('✅ App services initialized successfully');
   }
 
   @override
