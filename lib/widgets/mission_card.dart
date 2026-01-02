@@ -42,11 +42,14 @@ class MissionCard extends StatelessWidget {
     // Get mission icon based on type
     final String icon = _getMissionIcon(mission.type);
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      margin: EdgeInsets.only(bottom: responsive.value(8, tablet: 12)),
-      padding: EdgeInsets.all(responsive.value(16, tablet: 24)),
-      decoration: BoxDecoration(
+    return InkWell(
+      onTap: () => _showMissionDetails(context, mission, responsive),
+      borderRadius: BorderRadius.circular(responsive.value(16, tablet: 20)),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        margin: EdgeInsets.only(bottom: responsive.value(8, tablet: 12)),
+        padding: EdgeInsets.all(responsive.value(16, tablet: 24)),
+        decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: gradientColors,
           begin: Alignment.topLeft,
@@ -189,26 +192,29 @@ class MissionCard extends StatelessWidget {
 
                 SizedBox(width: responsive.value(8, tablet: 12)),
 
-                // Claim button (if canClaim)
+                // Claim button (if canClaim) - wrapped to prevent card tap
                 if (mission.canClaim)
-                  ElevatedButton(
-                    onPressed: () => onClaim(mission),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFFFFD700),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: responsive.value(16, tablet: 20),
-                        vertical: responsive.value(8, tablet: 12),
+                  GestureDetector(
+                    onTap: () {}, // Prevents tap from bubbling to card
+                    child: ElevatedButton(
+                      onPressed: () => onClaim(mission),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFFFFD700),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: responsive.value(16, tablet: 20),
+                          vertical: responsive.value(8, tablet: 12),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                    child: Text(
-                      'CLAIM',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: responsive.fontSize(12, 14, 16),
+                      child: Text(
+                        'CLAIM',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: responsive.fontSize(12, 14, 16),
+                        ),
                       ),
                     ),
                   ),
@@ -246,6 +252,154 @@ class MissionCard extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+      ),
+    );
+  }
+
+  /// Show mission details dialog
+  void _showMissionDetails(BuildContext context, DailyMission mission, ResponsiveUtil responsive) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1a1a2e),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(responsive.value(20, tablet: 24)),
+        ),
+        title: Row(
+          children: [
+            Text(
+              _getMissionIcon(mission.type),
+              style: TextStyle(fontSize: responsive.fontSize(24, 30, 36)),
+            ),
+            SizedBox(width: responsive.value(12, tablet: 16)),
+            Expanded(
+              child: Text(
+                mission.title,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: responsive.fontSize(18, 22, 26),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Description
+            Text(
+              mission.description,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.9),
+                fontSize: responsive.fontSize(14, 18, 20),
+                height: 1.5,
+              ),
+            ),
+            SizedBox(height: responsive.value(16, tablet: 24)),
+            
+            // Progress
+            Container(
+              padding: EdgeInsets.all(responsive.value(12, tablet: 16)),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(responsive.value(12, tablet: 16)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Progress',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      fontSize: responsive.fontSize(12, 16, 18),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(height: responsive.value(8, tablet: 12)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${mission.progress} / ${mission.target}',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: responsive.fontSize(16, 20, 24),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        '${(mission.progressPercentage * 100).toStringAsFixed(0)}%',
+                        style: TextStyle(
+                          color: const Color(0xFFFFD700),
+                          fontSize: responsive.fontSize(16, 20, 24),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: responsive.value(8, tablet: 12)),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(responsive.value(4, tablet: 6)),
+                    child: LinearProgressIndicator(
+                      value: mission.progressPercentage,
+                      backgroundColor: Colors.white.withValues(alpha: 0.2),
+                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFD700)),
+                      minHeight: responsive.value(8, tablet: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Reward
+            SizedBox(height: responsive.value(16, tablet: 24)),
+            Container(
+              padding: EdgeInsets.all(responsive.value(12, tablet: 16)),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
+                ),
+                borderRadius: BorderRadius.circular(responsive.value(12, tablet: 16)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('🪙', style: TextStyle(fontSize: responsive.fontSize(20, 26, 32))),
+                  SizedBox(width: responsive.value(8, tablet: 12)),
+                  Flexible(
+                    child: Text(
+                      'Reward: ${mission.coinReward} Coins',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: responsive.fontSize(16, 20, 24),
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'CLOSE',
+              style: TextStyle(
+                color: const Color(0xFFFFD700),
+                fontSize: responsive.fontSize(14, 18, 20),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
         ],
       ),
     );
