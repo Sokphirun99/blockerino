@@ -122,33 +122,6 @@ class MissionCard extends StatelessWidget {
                   ],
                 ),
               ),
-
-              // Coin reward
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: responsive.value(10, tablet: 16), 
-                  vertical: responsive.value(4, tablet: 8),
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(responsive.value(16, tablet: 20)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('🪙', style: TextStyle(fontSize: responsive.fontSize(14, 18, 22))),
-                    SizedBox(width: responsive.value(4, tablet: 6)),
-                    Text(
-                      '${mission.coinReward}',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: responsive.fontSize(12, 16, 18),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
 
@@ -355,37 +328,6 @@ class MissionCard extends StatelessWidget {
               ),
             ),
             
-            // Reward
-            SizedBox(height: responsive.value(16, tablet: 24)),
-            Container(
-              padding: EdgeInsets.all(responsive.value(12, tablet: 16)),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
-                ),
-                borderRadius: BorderRadius.circular(responsive.value(12, tablet: 16)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('🪙', style: TextStyle(fontSize: responsive.fontSize(20, 26, 32))),
-                  SizedBox(width: responsive.value(8, tablet: 12)),
-                  Flexible(
-                    child: Text(
-                      'Reward: ${mission.coinReward} Coins',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: responsive.fontSize(16, 20, 24),
-                        fontWeight: FontWeight.bold,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
         actions: [

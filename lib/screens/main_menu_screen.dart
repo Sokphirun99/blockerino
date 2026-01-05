@@ -12,10 +12,10 @@ import '../widgets/shared_ui_components.dart';
 import '../services/admob_service.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'game_screen.dart';
-import 'daily_missions_screen.dart';
+import 'daily_challenge_screen.dart';
 // DISABLED: Hidden features
+// import 'daily_missions_screen.dart';
 // import 'story_mode_screen.dart';
-// import 'daily_challenge_screen.dart';
 // import 'leaderboard_screen.dart';
 // import 'store_screen.dart';
 
@@ -261,15 +261,15 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                                 ),
                                 const SizedBox(height: 16),
 
-                                // Daily Missions Button
+                                // Block Quest Mode Button (200 puzzle levels)
                                 _MenuButton(
-                                  text: '🎯 ${localizations.translate('daily_missions')}',
-                                  subtitle: localizations.translate('daily_missions_subtitle'),
+                                  text: '🗺️ ${localizations.translate('block_quest')}',
+                                  subtitle: localizations.translate('block_quest_subtitle'),
                                   color: const Color(0xFFFFD700),
                                   onPressed: () {
                                     Navigator.push(
                                       context,
-                                      MaterialPageRoute(builder: (context) => const DailyMissionsScreen()),
+                                      MaterialPageRoute(builder: (context) => const DailyChallengeScreen()),
                                     );
                                   },
                                 ),

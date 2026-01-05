@@ -12,6 +12,7 @@ import '../models/board.dart';
 import '../models/game_mode.dart';
 import '../models/game_theme.dart';
 import '../models/story_level.dart';
+import '../models/daily_challenge.dart';
 import '../widgets/board_grid_widget.dart';
 import '../widgets/hand_pieces_widget.dart';
 import '../widgets/game_hud_widget.dart';
@@ -941,7 +942,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       return;
     }
 
-    final isHighScore = state.finalScore >= settingsCubit.state.highScore;
+    // Get the correct high score based on game mode (Classic vs Chaos)
+    final currentHighScore = state.gameMode == GameMode.chaos
+        ? settingsCubit.state.chaosHighScore
+        : settingsCubit.state.highScore;
+    final isHighScore = state.finalScore >= currentHighScore;
 
     // Get story mode data from state if available
     final isStoryMode = state.storyLevel != null;
@@ -1085,7 +1090,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                   const Icon(Icons.star, color: Color(0xFFFFE66D), size: 18),
                   const SizedBox(width: 8),
                   Text(
-                    'Best: ${settingsCubit.state.highScore}',
+                    'Best: $currentHighScore',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Colors.white70,
                           fontSize: 14,
@@ -1111,21 +1116,23 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           ),
           if (isStoryMode &&
               levelCompleted &&
-              widget.storyLevel!.levelNumber < StoryLevel.allLevels.length)
+              state.storyLevel!.levelNumber < 200) // Support up to 200 adventure levels
               // ✅ Direct child, no Flexible
             ElevatedButton(
               onPressed: () {
-                final nextLevel = StoryLevel.allLevels.firstWhere(
-                  (level) =>
-                      level.levelNumber == widget.storyLevel!.levelNumber + 1,
-                );
+                // Get next level from AdventureLevels (200 levels) instead of StoryLevel.allLevels
+                final currentLevelNum = state.storyLevel!.levelNumber;
+                final nextLevel = AdventureLevels.getLevel(currentLevelNum + 1);
                 gameCubit.resetGame();
                   Navigator.pop(dialogContext);
                 if (context.mounted) {
+                  // Start game with next level using cubit (not widget.storyLevel)
+                  gameCubit.startGame(nextLevel.gameMode, storyLevel: nextLevel);
+                  // Pop and push to refresh game screen
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => GameScreen(storyLevel: nextLevel),
+                      builder: (context) => const GameScreen(),
                     ),
                   );
                 }

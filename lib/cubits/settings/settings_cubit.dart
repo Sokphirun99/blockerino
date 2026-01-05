@@ -143,7 +143,8 @@ class SettingsCubit extends Cubit<SettingsState> {
     final soundEnabled = prefs.getBool('soundEnabled') ?? true;
     final hapticsEnabled = prefs.getBool('hapticsEnabled') ?? true;
     final animationsEnabled = prefs.getBool('animationsEnabled') ?? true;
-    final highScore = prefs.getInt('highScore') ?? 0;
+    final highScore = prefs.getInt('highScore') ?? 0; // Classic mode high score
+    final chaosHighScore = prefs.getInt('chaosHighScore') ?? 0; // Chaos mode high score
     final coins = prefs.getInt('coins') ?? 0;
     final completedChallengeIds =
         prefs.getStringList('completedChallenges') ?? [];
@@ -172,6 +173,7 @@ class SettingsCubit extends Cubit<SettingsState> {
       hapticsEnabled: hapticsEnabled,
       animationsEnabled: animationsEnabled,
       highScore: highScore,
+      chaosHighScore: chaosHighScore,
       coins: coins,
       powerUpInventory: powerUpInventory,
       completedChallengeIds: completedChallengeIds,
@@ -472,6 +474,7 @@ class SettingsCubit extends Cubit<SettingsState> {
     emit(SettingsState.initial());
   }
 
+  /// Update high score for Classic mode (shown on main menu)
   Future<void> updateHighScore(int newScore) async {
     if (newScore > state.highScore) {
       final prefs = await SharedPreferences.getInstance();
@@ -489,10 +492,29 @@ class SettingsCubit extends Cubit<SettingsState> {
     }
   }
 
+  /// Update high score for Chaos mode (separate tracking)
+  Future<void> updateChaosHighScore(int newScore) async {
+    if (newScore > state.chaosHighScore) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('chaosHighScore', newScore);
+
+      // Sync to Firestore
+      final uid = _authService.currentUser?.uid;
+      if (uid != null) {
+        await _firestoreService.updateUserProfile(uid, {
+          'chaosHighScore': newScore,
+        });
+      }
+
+      emit(state.copyWith(chaosHighScore: newScore));
+    }
+  }
+
   Future<void> resetHighScore() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('highScore', 0);
-    emit(state.copyWith(highScore: 0));
+    await prefs.setInt('chaosHighScore', 0);
+    emit(state.copyWith(highScore: 0, chaosHighScore: 0));
   }
 
   /// Change app language

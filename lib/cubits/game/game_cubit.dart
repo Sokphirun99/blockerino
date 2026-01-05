@@ -198,7 +198,8 @@ class GameCubit extends Cubit<GameState> {
       _resetMissionTracking();
 
       final config = GameModeConfig.fromMode(mode);
-      final board = Board(size: config.boardSize);
+      // Add obstacles for chaos/adventure mode
+      final board = Board(size: config.boardSize, addObstacles: mode == GameMode.chaos);
       final themeColors = settingsCubit?.state.currentTheme.blockColors;
       final hand = _pieceService.generateHand(config.handSize, themeColors: themeColors);
 
@@ -692,7 +693,13 @@ class GameCubit extends Cubit<GameState> {
       // Regular mode: game over
       _soundService.stopBGM();
       _soundService.playGameOver();
-      settingsCubit?.updateHighScore(newScore);
+
+      // Update high score based on game mode (Classic vs Chaos)
+      if (currentState.gameMode == GameMode.chaos) {
+        settingsCubit?.updateChaosHighScore(newScore);
+      } else {
+        settingsCubit?.updateHighScore(newScore); // Classic mode
+      }
 
       // Track mission progress
       _trackMissionProgress(

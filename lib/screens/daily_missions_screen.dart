@@ -73,13 +73,11 @@ class _DailyMissionsScreenState extends State<DailyMissionsScreen>
     final reward = await _missionService.claimReward(mission.id);
 
     if (reward > 0 && mounted) {
-      // Add coins to user
-      context.read<SettingsCubit>().addCoins(reward);
-
+      // Mission completed - no coins, just completion
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Claimed $reward coins! 🎉'),
+          content: const Text('Mission Completed! 🎉'),
           backgroundColor: const Color(0xFF4ade80),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(

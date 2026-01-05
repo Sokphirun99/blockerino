@@ -7,7 +7,8 @@ class SettingsState extends Equatable {
   final bool soundEnabled;
   final bool hapticsEnabled;
   final bool animationsEnabled;
-  final int highScore;
+  final int highScore; // Classic mode high score (shown on main menu)
+  final int chaosHighScore; // Chaos mode high score (separate)
   final int coins;
   final Map<PowerUpType, int> powerUpInventory;
   final List<String> completedChallengeIds;
@@ -22,6 +23,7 @@ class SettingsState extends Equatable {
     required this.hapticsEnabled,
     required this.animationsEnabled,
     required this.highScore,
+    this.chaosHighScore = 0,
     required this.coins,
     required this.powerUpInventory,
     required this.completedChallengeIds,
@@ -64,6 +66,7 @@ class SettingsState extends Equatable {
     bool? hapticsEnabled,
     bool? animationsEnabled,
     int? highScore,
+    int? chaosHighScore,
     int? coins,
     Map<PowerUpType, int>? powerUpInventory,
     List<String>? completedChallengeIds,
@@ -78,6 +81,7 @@ class SettingsState extends Equatable {
       hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
       animationsEnabled: animationsEnabled ?? this.animationsEnabled,
       highScore: highScore ?? this.highScore,
+      chaosHighScore: chaosHighScore ?? this.chaosHighScore,
       coins: coins ?? this.coins,
       powerUpInventory: powerUpInventory ?? this.powerUpInventory,
       completedChallengeIds: completedChallengeIds ?? this.completedChallengeIds,
@@ -95,6 +99,7 @@ class SettingsState extends Equatable {
         hapticsEnabled,
         animationsEnabled,
         highScore,
+        chaosHighScore,
         coins,
         powerUpInventory,
         completedChallengeIds,

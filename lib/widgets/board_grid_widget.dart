@@ -345,6 +345,10 @@ class _BlockCellState extends State<_BlockCell>
       case BlockType.filled:
         cellColor = widget.block.color ?? Colors.blue;
         break;
+      case BlockType.blocked:
+        // Obstacle cell - dark with pattern
+        cellColor = widget.block.color ?? const Color(0xFF2d3748);
+        break;
       case BlockType.hover:
         cellColor = widget.block.color ?? Colors.blue;
         break;

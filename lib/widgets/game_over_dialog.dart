@@ -121,13 +121,12 @@ class _GameOverDialogState extends State<GameOverDialog>
                     ),
                   ],
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Title
-                    Flexible(
-                      flex: 0,
-                      child: Text(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Title
+                      Text(
                         isNewHighScore ? '🎉 NEW HIGH SCORE!' : 'GAME OVER',
                         style: TextStyle(
                           color: Colors.white,
@@ -146,9 +145,8 @@ class _GameOverDialogState extends State<GameOverDialog>
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ),
 
-                    const SizedBox(height: 16),
+                      const SizedBox(height: 16),
 
                     // Score display
                     Container(
@@ -244,31 +242,27 @@ class _GameOverDialogState extends State<GameOverDialog>
                           children: [
                             const Text('🪙', style: TextStyle(fontSize: 14)),
                             const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                '+${widget.coinsEarned} coins',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                            Text(
+                              '+${widget.coinsEarned} coins',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             if (widget.streakMultiplier != null && widget.streakMultiplier! > 1.0) ...[
                               const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  '(×${widget.streakMultiplier!.toStringAsFixed(1)} streak)',
-                                  style: TextStyle(
-                                    color: Colors.orange.shade300,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                              Text(
+                                '(×${widget.streakMultiplier!.toStringAsFixed(1)} streak)',
+                                style: TextStyle(
+                                  color: Colors.orange.shade300,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
                           ],
@@ -343,6 +337,7 @@ class _GameOverDialogState extends State<GameOverDialog>
                       ],
                     ),
                   ],
+                ),
                 ),
               ),
             ),

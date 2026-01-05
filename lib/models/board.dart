@@ -4,6 +4,7 @@ import 'piece.dart';
 enum BlockType {
   empty,
   filled,
+  blocked, // Obstacle cell - cannot be filled
   hover,
   hoverBreak, // Will show lines that are about to be cleared
   hoverBreakFilled, // Filled blocks in lines that will be cleared
@@ -75,7 +76,7 @@ class Board {
   late List<BigInt> _rowMasks; // Pre-calculated masks for O(1) row checks
   late List<BigInt> _colMasks; // Pre-calculated masks for O(1) column checks
 
-  Board({required this.size}) {
+  Board({required this.size, bool addObstacles = false}) {
     grid = List.generate(
       size,
       (i) => List.generate(
@@ -83,6 +84,12 @@ class Board {
         (j) => const BoardBlock(type: BlockType.empty),
       ),
     );
+    
+    // Add obstacles for adventure/chaos mode
+    if (addObstacles) {
+      _addRandomObstacles();
+    }
+    
     _initializeMasks();
     _updateBitboard();
   }
@@ -90,6 +97,29 @@ class Board {
   Board.fromGrid(this.size, this.grid) {
     _initializeMasks();
     _updateBitboard();
+  }
+
+  /// Add random obstacle blocks for adventure mode
+  void _addRandomObstacles() {
+    final random = DateTime.now().millisecondsSinceEpoch;
+    final obstacleCount = (size * size * 0.15).round(); // 15% of board
+    final obstacles = <int>{};
+    
+    // Generate random positions for obstacles
+    while (obstacles.length < obstacleCount) {
+      final pos = (random + obstacles.length * 7) % (size * size);
+      obstacles.add(pos);
+    }
+    
+    // Place obstacles on board
+    for (final pos in obstacles) {
+      final row = pos ~/ size;
+      final col = pos % size;
+      grid[row][col] = const BoardBlock(
+        type: BlockType.blocked,
+        color: Color(0xFF2d3748), // Dark gray for obstacles
+      );
+    }
   }
 
   /// Pre-calculate row and column masks for O(1) line checking
@@ -117,7 +147,7 @@ class Board {
     for (int row = 0; row < size; row++) {
       for (int col = 0; col < size; col++) {
         if (grid[row][col].type == BlockType.filled ||
-            grid[row][col].type == BlockType.hoverBreakFilled) {
+            grid[row][col].type == BlockType.blocked) {
           _bitboard |= BigInt.one << (row * size + col);
         }
       }
