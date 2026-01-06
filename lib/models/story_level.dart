@@ -30,6 +30,7 @@ class StoryLevel {
   // Block Quest features
   final List<PrefilledBlock> prefilledBlocks; // Pre-filled blocks at level start
   final List<IceBlock> iceBlocks; // Ice blocks that need 2 clears
+  final List<BombBlock> bombBlocks; // Bomb blocks that explode 3x3 area
   final List<StarPosition> starPositions; // Stars to collect
   final int? targetStars; // Number of stars to collect (objective)
 
@@ -52,6 +53,7 @@ class StoryLevel {
     this.starsEarned = 0,
     this.prefilledBlocks = const [],
     this.iceBlocks = const [],
+    this.bombBlocks = const [],
     this.starPositions = const [],
     this.targetStars,
   });
@@ -75,6 +77,7 @@ class StoryLevel {
     int? starsEarned,
     List<PrefilledBlock>? prefilledBlocks,
     List<IceBlock>? iceBlocks,
+    List<BombBlock>? bombBlocks,
     List<StarPosition>? starPositions,
     int? targetStars,
   }) {
@@ -97,6 +100,7 @@ class StoryLevel {
       starsEarned: starsEarned ?? this.starsEarned,
       prefilledBlocks: prefilledBlocks ?? this.prefilledBlocks,
       iceBlocks: iceBlocks ?? this.iceBlocks,
+      bombBlocks: bombBlocks ?? this.bombBlocks,
       starPositions: starPositions ?? this.starPositions,
       targetStars: targetStars ?? this.targetStars,
     );
@@ -149,9 +153,9 @@ class StoryLevel {
     StoryLevel(
       levelNumber: 4,
       title: 'Embrace Chaos',
-      description: 'Try the Chaos mode',
+      description: 'Try the Chaos mode with bombs!',
       story:
-          'Things are about to get wild! In Chaos mode, anything can happen.',
+          'Things are about to get wild! Bombs explode in a 3x3 area when you clear a line with them.',
       gameMode: GameMode.chaos,
       difficulty: LevelDifficulty.medium,
       targetScore: 1500,
@@ -159,6 +163,10 @@ class StoryLevel {
       starThreshold2: 1500, // 2 stars: Reach target
       starThreshold3: 2200, // 3 stars: Exceed target
       coinReward: 150,
+      bombBlocks: [
+        BombBlock(row: 2, col: 2),
+        BombBlock(row: 5, col: 5),
+      ],
     ),
     StoryLevel(
       levelNumber: 5,
@@ -193,8 +201,8 @@ class StoryLevel {
     StoryLevel(
       levelNumber: 7,
       title: 'Marathon',
-      description: 'Endurance test',
-      story: 'How long can you survive? This is the ultimate test!',
+      description: 'Endurance test with bombs',
+      story: 'How long can you survive? Use the bombs strategically to clear more blocks!',
       gameMode: GameMode.chaos,
       difficulty: LevelDifficulty.hard,
       targetScore: 5000,
@@ -202,6 +210,12 @@ class StoryLevel {
       starThreshold2: 5000, // 2 stars: Reach target
       starThreshold3: 7000, // 3 stars: Exceed target
       coinReward: 500,
+      bombBlocks: [
+        BombBlock(row: 1, col: 1),
+        BombBlock(row: 1, col: 6),
+        BombBlock(row: 6, col: 1),
+        BombBlock(row: 6, col: 6),
+      ],
     ),
     StoryLevel(
       levelNumber: 8,

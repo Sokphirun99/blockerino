@@ -156,6 +156,7 @@ class AdventureLevels {
     // Generate Block Quest features based on level
     final prefilledBlocks = _generatePrefilledBlocks(levelNumber, tier, boardSize);
     final iceBlocks = _generateIceBlocks(levelNumber, tier, boardSize, prefilledBlocks);
+    final bombBlocks = _generateBombBlocks(levelNumber, tier, boardSize, prefilledBlocks, iceBlocks);
     final starPositions = _generateStarPositions(levelNumber, tier, boardSize, prefilledBlocks, iceBlocks);
     final targetStars = starPositions.isNotEmpty ? starPositions.length : null;
 
@@ -177,6 +178,7 @@ class AdventureLevels {
       isUnlocked: levelNumber == 1,
       prefilledBlocks: prefilledBlocks,
       iceBlocks: iceBlocks,
+      bombBlocks: bombBlocks,
       starPositions: starPositions,
       targetStars: targetStars,
     );
@@ -295,6 +297,61 @@ class AdventureLevels {
     return blocks;
   }
 
+  /// Generate bomb blocks based on level
+  static List<BombBlock> _generateBombBlocks(int level, LevelTier tier, int boardSize,
+      List<PrefilledBlock> prefilled, List<IceBlock> ice) {
+    // Start adding bombs from level 20
+    if (level < 20) return [];
+
+    final random = math.Random(level * 31);
+    int bombCount;
+
+    switch (tier) {
+      case LevelTier.beginner:
+        bombCount = (level >= 20) ? 1 : 0; // 1 bomb at level 20
+        break;
+      case LevelTier.easy:
+        bombCount = 1 + (level - 21) ~/ 10; // 1-3 bombs
+        break;
+      case LevelTier.medium:
+        bombCount = 2 + (level - 51) ~/ 12; // 2-6 bombs
+        break;
+      case LevelTier.hard:
+        bombCount = 4 + (level - 101) ~/ 12; // 4-8 bombs
+        break;
+      case LevelTier.expert:
+        bombCount = 6 + (level - 151) ~/ 10; // 6-9 bombs
+        break;
+      case LevelTier.master:
+        bombCount = 8 + (level - 181) ~/ 5; // 8-12 bombs
+        break;
+    }
+
+    // Get positions already used
+    final usedPositions = <String>{};
+    for (final b in prefilled) {
+      usedPositions.add('${b.row}-${b.col}');
+    }
+    for (final b in ice) {
+      usedPositions.add('${b.row}-${b.col}');
+    }
+
+    final bombs = <BombBlock>[];
+
+    while (bombs.length < bombCount) {
+      final row = random.nextInt(boardSize);
+      final col = random.nextInt(boardSize);
+      final key = '$row-$col';
+
+      if (!usedPositions.contains(key)) {
+        usedPositions.add(key);
+        bombs.add(BombBlock(row: row, col: col));
+      }
+    }
+
+    return bombs;
+  }
+
   /// Generate star positions based on level
   static List<StarPosition> _generateStarPositions(int level, LevelTier tier, int boardSize,
       List<PrefilledBlock> prefilled, List<IceBlock> ice) {
@@ -384,15 +441,15 @@ class AdventureLevels {
       case LevelTier.beginner:
         return 5 + ((level - 5) ~/ 3 * 2);
       case LevelTier.easy:
-        return 15 + ((level - 23) ~/ 3 * 3);
+        return 15 + ((level - 21) ~/ 3 * 3);
       case LevelTier.medium:
-        return 30 + ((level - 53) ~/ 3 * 4);
+        return 30 + ((level - 51) ~/ 3 * 4);
       case LevelTier.hard:
         return 60 + ((level - 101) ~/ 3 * 5);
       case LevelTier.expert:
-        return 100 + ((level - 152) ~/ 3 * 8);
+        return 100 + ((level - 151) ~/ 3 * 8);
       case LevelTier.master:
-        return 150 + ((level - 182) ~/ 3 * 15);
+        return 150 + ((level - 181) ~/ 3 * 15);
     }
   }
 

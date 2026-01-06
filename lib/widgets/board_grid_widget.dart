@@ -347,6 +347,7 @@ class _BlockCellState extends State<_BlockCell>
     bool isIce = false;
     bool isIce2 = false;
     bool isBlocked = false;
+    bool isBomb = false;
 
     switch (widget.block.type) {
       case BlockType.filled:
@@ -380,6 +381,10 @@ class _BlockCellState extends State<_BlockCell>
       case BlockType.ice2:
         cellColor = const Color(0xFF5DADE2); // Solid ice blue
         isIce2 = true;
+        break;
+      case BlockType.bomb:
+        cellColor = const Color(0xFFFF6B6B); // Red for bombs
+        isBomb = true;
         break;
       case BlockType.empty:
         cellColor = const Color(0xFF1a1a2e);
@@ -520,6 +525,44 @@ class _BlockCellState extends State<_BlockCell>
         child: CustomPaint(
           size: Size.infinite,
           painter: _BlockedCellPainter(),
+        ),
+      );
+    }
+
+    // Bomb block rendering
+    if (isBomb) {
+      return Container(
+        margin: const EdgeInsets.all(1),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(4),
+          gradient: RadialGradient(
+            center: Alignment.center,
+            radius: 0.8,
+            colors: [
+              const Color(0xFFFF8A80), // Light red center
+              cellColor,
+              const Color(0xFFD32F2F), // Dark red edge
+            ],
+          ),
+          border: Border.all(
+            color: const Color(0xFFFFCDD2),
+            width: 2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: cellColor.withValues(alpha: 0.6),
+              blurRadius: 8,
+              spreadRadius: 2,
+            ),
+            BoxShadow(
+              color: Colors.orange.withValues(alpha: 0.3),
+              blurRadius: 4,
+            ),
+          ],
+        ),
+        child: CustomPaint(
+          size: Size.infinite,
+          painter: _BombPainter(),
         ),
       );
     }
@@ -689,6 +732,57 @@ class _BlockedCellPainter extends CustomPainter {
       Offset(margin, size.height - margin),
       paint,
     );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Bomb cell painter with bomb icon
+class _BombPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final bombRadius = size.width * 0.25;
+
+    // Draw bomb body (dark circle)
+    final bodyPaint = Paint()
+      ..color = const Color(0xFF1a1a1a)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, bombRadius, bodyPaint);
+
+    // Draw bomb highlight
+    final highlightPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.4)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(
+      Offset(center.dx - bombRadius * 0.3, center.dy - bombRadius * 0.3),
+      bombRadius * 0.2,
+      highlightPaint,
+    );
+
+    // Draw fuse
+    final fusePaint = Paint()
+      ..color = const Color(0xFF8B4513)
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final fuseStart = Offset(center.dx + bombRadius * 0.5, center.dy - bombRadius * 0.5);
+    final fuseEnd = Offset(center.dx + bombRadius * 1.2, center.dy - bombRadius * 1.0);
+    canvas.drawLine(fuseStart, fuseEnd, fusePaint);
+
+    // Draw spark at fuse end
+    final sparkPaint = Paint()
+      ..color = const Color(0xFFFFD700)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(fuseEnd, 3, sparkPaint);
+
+    // Draw spark glow
+    final glowPaint = Paint()
+      ..color = const Color(0xFFFF6B00).withValues(alpha: 0.5)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(fuseEnd, 5, glowPaint);
   }
 
   @override

@@ -12,6 +12,7 @@ enum BlockType {
   hoverBreakEmpty, // Empty blocks in lines that will be cleared
   ice, // Ice block - 1 hit remaining (cracked)
   ice2, // Ice block - 2 hits remaining (solid)
+  bomb, // Bomb block - explodes 3x3 area when line is cleared
 }
 
 /// Info about a cleared block for particle effects
@@ -68,6 +69,14 @@ class IceBlock {
   final int hits; // 1 or 2
 
   const IceBlock({required this.row, required this.col, this.hits = 2});
+}
+
+/// Bomb block for level initialization
+class BombBlock {
+  final int row;
+  final int col;
+
+  const BombBlock({required this.row, required this.col});
 }
 
 class BoardBlock {
@@ -162,6 +171,20 @@ class Board {
     _updateBitboard();
   }
 
+  /// Initialize bomb blocks for Block Quest levels
+  void initializeBombBlocks(List<BombBlock> blocks) {
+    const bombColor = Color(0xFFFF6B6B); // Red for bombs
+    for (final block in blocks) {
+      if (block.row >= 0 && block.row < size && block.col >= 0 && block.col < size) {
+        grid[block.row][block.col] = const BoardBlock(
+          type: BlockType.bomb,
+          color: bombColor,
+        );
+      }
+    }
+    _updateBitboard();
+  }
+
   /// Initialize star positions for Block Quest levels
   void initializeStars(List<StarPosition> stars) {
     starPositions = stars.map((s) => s.key).toSet();
@@ -194,6 +217,31 @@ class Board {
         color: Color(0xFF2d3748), // Dark gray for obstacles
       );
     }
+  }
+
+  /// Add random bomb blocks on the board
+  void addRandomBombs({int count = 2}) {
+    final rng = math.Random(DateTime.now().millisecondsSinceEpoch);
+    final maxCells = size * size;
+    int bombsPlaced = 0;
+    int attempts = 0;
+
+    while (bombsPlaced < count && attempts < maxCells * 2) {
+      final pos = rng.nextInt(maxCells);
+      final row = pos ~/ size;
+      final col = pos % size;
+
+      // Only place bomb on empty cells
+      if (grid[row][col].type == BlockType.empty) {
+        grid[row][col] = const BoardBlock(
+          type: BlockType.bomb,
+          color: Color(0xFFFF6B6B), // Red for bombs
+        );
+        bombsPlaced++;
+      }
+      attempts++;
+    }
+    _updateBitboard();
   }
 
   /// Pre-calculate row and column masks for O(1) line checking
@@ -238,14 +286,16 @@ class Board {
         if (type == BlockType.filled ||
             type == BlockType.blocked ||
             type == BlockType.ice ||
-            type == BlockType.ice2) {
+            type == BlockType.ice2 ||
+            type == BlockType.bomb) {
           _collisionBitboard |= bit;
         }
 
         // Line bitboard excludes blocked cells (they prevent line completion)
         if (type == BlockType.filled ||
             type == BlockType.ice ||
-            type == BlockType.ice2) {
+            type == BlockType.ice2 ||
+            type == BlockType.bomb) {
           _lineBitboard |= bit;
         }
       }
@@ -382,13 +432,14 @@ class Board {
     Set<int> rowsToClear = {};
     Set<int> colsToClear = {};
 
-    // Helper to check if a cell is filled (includes ice blocks)
+    // Helper to check if a cell is filled (includes ice blocks and bombs)
     // NOTE: Blocked cells are NOT included - they are permanent obstacles
     // that prevent line completion (players must work around them)
     bool isCellFilled(BlockType type) {
       return type == BlockType.filled ||
           type == BlockType.ice ||
-          type == BlockType.ice2;
+          type == BlockType.ice2 ||
+          type == BlockType.bomb;
     }
 
     // Check rows
@@ -462,12 +513,13 @@ class Board {
 
   /// Break complete lines and return info about cleared blocks
   /// Returns a tuple of (lineCount, clearedBlocks) for particle effects
-  /// Handles ice blocks (need 2 clears) and star collection
+  /// Handles ice blocks (need 2 clears), bombs (3x3 explosion), and star collection
   LineClearResult breakLinesWithInfo() {
     List<int> rowsToClear = [];
     List<int> colsToClear = [];
     List<ClearedBlockInfo> clearedBlocks = [];
     List<StarPosition> collectedStars = [];
+    List<(int, int)> bombPositions = []; // Track bombs that will explode
 
     // Check rows using O(1) bitwise operations (uses line bitboard - excludes blocked)
     for (int row = 0; row < size; row++) {
@@ -483,6 +535,23 @@ class Board {
       }
     }
 
+    // Find all bombs in lines that will be cleared
+    for (int row in rowsToClear) {
+      for (int col = 0; col < size; col++) {
+        if (grid[row][col].type == BlockType.bomb) {
+          bombPositions.add((row, col));
+        }
+      }
+    }
+    for (int col in colsToClear) {
+      for (int row = 0; row < size; row++) {
+        if (grid[row][col].type == BlockType.bomb &&
+            !bombPositions.contains((row, col))) {
+          bombPositions.add((row, col));
+        }
+      }
+    }
+
     // Collect info about blocks to clear (before clearing)
     // Calculate delays for ripple effect (from center outward)
     Set<String> processedPositions = {};
@@ -492,13 +561,13 @@ class Board {
     const iceColor = Color(0xFF89CFF0);
 
     // Process all positions that will be affected
-    void processPosition(int row, int col, double distanceFromCenter) {
+    void processPosition(int row, int col, double distanceFromCenter, {bool isBombExplosion = false}) {
       final key = '$row-$col';
       if (processedPositions.contains(key)) return;
       processedPositions.add(key);
 
       final block = grid[row][col];
-      final delay = (distanceFromCenter * delayPerUnit).toInt();
+      final delay = isBombExplosion ? 50 : (distanceFromCenter * delayPerUnit).toInt();
 
       // Collect star if present
       if (starPositions.contains(key)) {
@@ -507,11 +576,11 @@ class Board {
       }
 
       // Add to cleared blocks for particle effects (except ice2 which just cracks)
-      if (block.type != BlockType.ice2) {
+      if (block.type != BlockType.ice2 && block.type != BlockType.empty && block.type != BlockType.blocked) {
         clearedBlocks.add(ClearedBlockInfo(
           row: row,
           col: col,
-          color: block.color,
+          color: block.type == BlockType.bomb ? const Color(0xFFFF6B6B) : block.color,
           delayMs: delay,
         ));
       }
@@ -531,11 +600,26 @@ class Board {
       }
     }
 
+    // Process bomb explosion areas (3x3 around each bomb)
+    for (final bombPos in bombPositions) {
+      final bombRow = bombPos.$1;
+      final bombCol = bombPos.$2;
+      for (int dr = -1; dr <= 1; dr++) {
+        for (int dc = -1; dc <= 1; dc++) {
+          final r = bombRow + dr;
+          final c = bombCol + dc;
+          if (r >= 0 && r < size && c >= 0 && c < size) {
+            processPosition(r, c, 0, isBombExplosion: true);
+          }
+        }
+      }
+    }
+
     // Clear lines with ice block handling
     // Track cleared cells to prevent double-clearing ice blocks at intersections
     final clearedCells = <String>{};
 
-    void clearCell(int row, int col) {
+    void clearCell(int row, int col, {bool fromBomb = false}) {
       final key = '$row-$col';
       // Skip if already cleared this cell (prevents ice2->ice->empty in one move)
       if (clearedCells.contains(key)) return;
@@ -549,7 +633,7 @@ class Board {
         // Ice block with 1 hit -> clear it
         grid[row][col] = const BoardBlock(type: BlockType.empty);
       } else if (block.type != BlockType.blocked) {
-        // Regular block -> clear it (but not obstacles)
+        // Regular block, bomb -> clear it (but not obstacles)
         grid[row][col] = const BoardBlock(type: BlockType.empty);
       }
     }
@@ -566,7 +650,53 @@ class Board {
       }
     }
 
-    if (rowsToClear.isNotEmpty || colsToClear.isNotEmpty) {
+    // Explode bombs with chain reaction support
+    // Bombs can trigger other bombs in their 3x3 area
+    final explodedBombs = <String>{};
+    final bombQueue = List<(int, int)>.from(bombPositions);
+    int chainDelay = 50;
+
+    while (bombQueue.isNotEmpty) {
+      final bombPos = bombQueue.removeAt(0);
+      final bombRow = bombPos.$1;
+      final bombCol = bombPos.$2;
+      final bombKey = '$bombRow-$bombCol';
+
+      // Skip if already exploded
+      if (explodedBombs.contains(bombKey)) continue;
+      explodedBombs.add(bombKey);
+
+      // Explode 3x3 area
+      for (int dr = -1; dr <= 1; dr++) {
+        for (int dc = -1; dc <= 1; dc++) {
+          final r = bombRow + dr;
+          final c = bombCol + dc;
+          if (r >= 0 && r < size && c >= 0 && c < size) {
+            final cellKey = '$r-$c';
+
+            // Check for chain reaction - if this cell has a bomb, add to queue
+            if (grid[r][c].type == BlockType.bomb && !explodedBombs.contains(cellKey)) {
+              bombQueue.add((r, c));
+              // Add chain bomb to clearedBlocks with delay
+              if (!processedPositions.contains(cellKey)) {
+                processedPositions.add(cellKey);
+                clearedBlocks.add(ClearedBlockInfo(
+                  row: r,
+                  col: c,
+                  color: const Color(0xFFFF6B6B),
+                  delayMs: chainDelay,
+                ));
+              }
+            }
+
+            clearCell(r, c, fromBomb: true);
+          }
+        }
+      }
+      chainDelay += 100; // Increase delay for each chain
+    }
+
+    if (rowsToClear.isNotEmpty || colsToClear.isNotEmpty || explodedBombs.isNotEmpty) {
       _updateBitboard();
     }
 
@@ -689,17 +819,27 @@ class Board {
     int filledCount = 0;
     for (int row = 0; row < size; row++) {
       for (int col = 0; col < size; col++) {
-        if (grid[row][col].type == BlockType.filled) filledCount++;
+        final type = grid[row][col].type;
+        if (type == BlockType.filled ||
+            type == BlockType.ice ||
+            type == BlockType.ice2 ||
+            type == BlockType.bomb) {
+          filledCount++;
+        }
       }
     }
     return filledCount / (size * size);
   }
 
-  /// Check if the board is completely empty (no filled blocks)
+  /// Check if the board is completely empty (no filled, ice, or bomb blocks)
   bool isEmpty() {
     for (int row = 0; row < size; row++) {
       for (int col = 0; col < size; col++) {
-        if (grid[row][col].type == BlockType.filled) {
+        final type = grid[row][col].type;
+        if (type == BlockType.filled ||
+            type == BlockType.ice ||
+            type == BlockType.ice2 ||
+            type == BlockType.bomb) {
           return false;
         }
       }
@@ -707,23 +847,33 @@ class Board {
     return true;
   }
 
-  /// Count total filled cells
+  /// Count total filled cells (includes ice and bomb blocks)
   int getFilledCount() {
     int count = 0;
     for (int row = 0; row < size; row++) {
       for (int col = 0; col < size; col++) {
-        if (grid[row][col].type == BlockType.filled) count++;
+        final type = grid[row][col].type;
+        if (type == BlockType.filled ||
+            type == BlockType.ice ||
+            type == BlockType.ice2 ||
+            type == BlockType.bomb) {
+          count++;
+        }
       }
     }
     return count;
   }
 
-  /// Get all filled block positions as (row, col) pairs
+  /// Get all filled block positions as (row, col) pairs (includes ice and bomb blocks)
   List<(int row, int col)> getFilledPositions() {
     final positions = <(int, int)>[];
     for (int row = 0; row < size; row++) {
       for (int col = 0; col < size; col++) {
-        if (grid[row][col].type == BlockType.filled) {
+        final type = grid[row][col].type;
+        if (type == BlockType.filled ||
+            type == BlockType.ice ||
+            type == BlockType.ice2 ||
+            type == BlockType.bomb) {
           positions.add((row, col));
         }
       }
@@ -731,13 +881,18 @@ class Board {
     return positions;
   }
 
-  /// Get color distribution on the board
+  /// Get color distribution on the board (includes ice and bomb blocks)
   Map<Color, int> getColorDistribution() {
     final distribution = <Color, int>{};
     for (int row = 0; row < size; row++) {
       for (int col = 0; col < size; col++) {
         final block = grid[row][col];
-        if (block.type == BlockType.filled && block.color != null) {
+        final type = block.type;
+        if ((type == BlockType.filled ||
+                type == BlockType.ice ||
+                type == BlockType.ice2 ||
+                type == BlockType.bomb) &&
+            block.color != null) {
           distribution[block.color!] = (distribution[block.color!] ?? 0) + 1;
         }
       }

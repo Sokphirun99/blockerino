@@ -232,6 +232,9 @@ class GameCubit extends Cubit<GameState> {
     if (level.iceBlocks.isNotEmpty) {
       board.initializeIceBlocks(level.iceBlocks);
     }
+    if (level.bombBlocks.isNotEmpty) {
+      board.initializeBombBlocks(level.bombBlocks);
+    }
     if (level.starPositions.isNotEmpty) {
       board.initializeStars(level.starPositions);
     }
